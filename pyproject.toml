@@ -13,7 +13,7 @@ authors = [
     {name = "Juan Jose Sanchez Bernal", email = "info@webcomunica.solutions"},
 ]
 maintainers = [
-    {name = "Webcomunica Solutions", email = "info@webcomunica.solutions"},
+    {name = "Webcomunica Soluciones Informaticas", email = "info@webcomunica.solutions"},
 ]
 keywords = ["n8n", "cli", "workflow", "automation", "cli-anything", "ai-agent"]
 classifiers = [
