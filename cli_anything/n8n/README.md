@@ -1,5 +1,11 @@
 # cli-anything-n8n
 
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![CLI-Anything](https://img.shields.io/badge/CLI--Anything-harness-orange.svg)](https://github.com/HKUDS/CLI-Anything)
+[![n8n](https://img.shields.io/badge/n8n-API%20v1-EA4B71.svg)](https://docs.n8n.io/api/api-reference/)
+[![Tests](https://img.shields.io/badge/tests-29%20passed-brightgreen.svg)]()
+
 > [Leer en Español](#spanish) | [Read in English](#english)
 
 ---
