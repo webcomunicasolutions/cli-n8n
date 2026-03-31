@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.0] - 2026-04-01
+
+### Added
+- `workflow export` — save any workflow to a portable JSON file
+- `workflow import` — create a workflow from a JSON file (with optional name override)
+- `execution watch` — live monitoring of executions with real-time polling
+- `status` — dashboard showing workflows, recent executions, and errors at a glance
+- REPL tab-completion for all commands and subcommands
+- GitHub Actions CI (Python 3.10-3.13)
+
 ## [1.1.0] - 2026-03-31
 
 ### Changed

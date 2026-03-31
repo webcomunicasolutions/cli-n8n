@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import sys
+import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -26,7 +28,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 def _conn(ctx: click.Context) -> dict[str, str]:
@@ -82,6 +84,7 @@ def repl(ctx: click.Context) -> None:
     """Start interactive REPL."""
     try:
         from prompt_toolkit import PromptSession
+        from prompt_toolkit.completion import WordCompleter
         from prompt_toolkit.history import InMemoryHistory
     except ImportError:
         click.echo("prompt-toolkit is required for REPL mode. Install: pip install prompt-toolkit")
@@ -90,7 +93,18 @@ def repl(ctx: click.Context) -> None:
     base_url = ctx.obj["base_url"]
     print_banner(base_url or "(not configured)")
 
-    session = PromptSession(history=InMemoryHistory())
+    # Build completer from all CLI commands
+    words = ["help", "exit", "quit", "status"]
+    for name, cmd in cli.commands.items():
+        if getattr(cmd, "hidden", False):
+            continue
+        words.append(name)
+        if hasattr(cmd, "commands"):
+            for sub in cmd.commands:
+                words.append(f"{name} {sub}")
+    completer = WordCompleter(words, ignore_case=True)
+
+    session = PromptSession(history=InMemoryHistory(), completer=completer)
     while True:
         try:
             line = session.prompt("n8n> ").strip()
@@ -262,6 +276,40 @@ def workflow_transfer(ctx: click.Context, workflow_id: str, project_id: str) -> 
     success(f"Workflow {workflow_id} transferred to project {project_id}")
 
 
+@workflow_.command("export")
+@click.argument("workflow_id")
+@click.option("-o", "--output", "out_path", default=None, help="Output file (default: <name>.json)")
+@click.pass_context
+def workflow_export(ctx: click.Context, workflow_id: str, out_path: str | None) -> None:
+    """Export a workflow to a JSON file."""
+    data = workflows.get_workflow(workflow_id, **_conn(ctx))
+    if not out_path:
+        name = data.get("name", workflow_id).replace(" ", "_").replace("/", "_")
+        out_path = f"{name}.json"
+    # Remove server-specific fields for portability
+    export_data = {k: v for k, v in data.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+    Path(out_path).write_text(json.dumps(export_data, indent=2, default=str))
+    success(f"Exported to {out_path}")
+
+
+@workflow_.command("import")
+@click.argument("file_path", type=click.Path(exists=True))
+@click.option("--name", default=None, help="Override workflow name")
+@click.pass_context
+def workflow_import(ctx: click.Context, file_path: str, name: str | None) -> None:
+    """Import a workflow from a JSON file."""
+    with open(file_path) as f:
+        data = json.load(f)
+    # Remove fields that would conflict on import
+    for field in ("id", "createdAt", "updatedAt", "versionId", "shared", "active"):
+        data.pop(field, None)
+    if name:
+        data["name"] = name
+    result = workflows.create_workflow(data, **_conn(ctx))
+    success(f"Imported as workflow {result.get('id', '?')} — {result.get('name', '?')}")
+    output(result, _json_flag(ctx))
+
+
 # ─── Executions ─────────────────────────────────────────────────────────────
 
 @cli.group("execution")
@@ -310,6 +358,101 @@ def execution_retry(ctx: click.Context, execution_id: str) -> None:
     """Retry a failed execution."""
     data = executions.retry_execution(execution_id, **_conn(ctx))
     output(data, _json_flag(ctx))
+
+
+@execution_.command("watch")
+@click.option("--workflow-id", default=None, help="Filter by workflow ID")
+@click.option("--interval", default=5, type=int, help="Poll interval in seconds (default: 5)")
+@click.option("--limit", default=5, type=int, help="Number of executions to show")
+@click.pass_context
+def execution_watch(ctx: click.Context, workflow_id: str | None, interval: int, limit: int) -> None:
+    """Watch executions in real-time (poll mode). Press Ctrl+C to stop."""
+    import shutil
+    conn = _conn(ctx)
+    click.secho(f"  Watching executions (every {interval}s). Ctrl+C to stop.\n", fg="cyan")
+    seen: set[str] = set()
+    try:
+        while True:
+            data = executions.list_executions(**conn, workflow_id=workflow_id, limit=limit)
+            rows = data.get("data", []) if isinstance(data, dict) else data
+            term_w = shutil.get_terminal_size().columns
+            click.echo(f"\033[2J\033[H", nl=False)  # clear screen
+            click.secho(f"  n8n executions — {time.strftime('%H:%M:%S')} (every {interval}s, Ctrl+C to stop)\n", fg="cyan")
+            if not rows:
+                click.secho("  No executions found.", fg="bright_black")
+            else:
+                for row in rows:
+                    eid = str(row.get("id", ""))
+                    status = row.get("status", "?")
+                    wf_id = row.get("workflowId", "?")
+                    started = str(row.get("startedAt", ""))[:19].replace("T", " ")
+                    is_new = eid not in seen
+                    seen.add(eid)
+                    color = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan"}.get(status, "white")
+                    marker = " *" if is_new else "  "
+                    line = f"{marker} {eid:>8s}  {click.style(status.ljust(8), fg=color)}  wf:{wf_id:<16s}  {started}"
+                    click.echo(line[:term_w])
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        click.echo("\n  Stopped.")
+
+
+# ─── Status Dashboard ──────────────────────────────────────────────────────
+
+@cli.command("status")
+@click.pass_context
+def status_dashboard(ctx: click.Context) -> None:
+    """Show a quick overview of your n8n instance."""
+    conn = _conn(ctx)
+    as_json = _json_flag(ctx)
+
+    wf_data = workflows.list_workflows(**conn, limit=200)
+    wf_list = wf_data.get("data", []) if isinstance(wf_data, dict) else wf_data
+    active_wfs = [w for w in wf_list if w.get("active")]
+    inactive_wfs = [w for w in wf_list if not w.get("active")]
+
+    exec_data = executions.list_executions(**conn, limit=10)
+    exec_list = exec_data.get("data", []) if isinstance(exec_data, dict) else exec_data
+    errors = [e for e in exec_list if e.get("status") == "error"]
+
+    if as_json:
+        output({
+            "workflows": {"total": len(wf_list), "active": len(active_wfs), "inactive": len(inactive_wfs)},
+            "recent_executions": len(exec_list),
+            "recent_errors": len(errors),
+            "last_error": errors[0] if errors else None,
+        }, True)
+        return
+
+    click.echo()
+    click.secho("  n8n Status Dashboard", fg="cyan", bold=True)
+    click.secho("  " + "=" * 40, fg="cyan")
+    click.echo()
+
+    click.secho("  Workflows", fg="cyan", bold=True)
+    click.echo(f"    Total:    {len(wf_list)}")
+    click.secho(f"    Active:   {len(active_wfs)}", fg="green")
+    click.echo(f"    Inactive: {len(inactive_wfs)}")
+    click.echo()
+
+    click.secho("  Recent Executions (last 10)", fg="cyan", bold=True)
+    if not exec_list:
+        click.secho("    No executions found.", fg="bright_black")
+    else:
+        for e in exec_list:
+            status = e.get("status", "?")
+            color = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan"}.get(status, "white")
+            started = str(e.get("startedAt", ""))[:19].replace("T", " ")
+            click.echo(f"    {e.get('id', '?'):>8s}  {click.style(status.ljust(8), fg=color)}  wf:{e.get('workflowId', '?'):<16s}  {started}")
+    click.echo()
+
+    if errors:
+        click.secho(f"  Errors: {len(errors)} in last 10 executions", fg="red", bold=True)
+        last = errors[0]
+        click.echo(f"    Last error: execution {last.get('id')} (wf:{last.get('workflowId')}) at {str(last.get('startedAt', ''))[:19]}")
+    else:
+        click.secho("  No errors in recent executions", fg="green")
+    click.echo()
 
 
 # ─── Credentials ────────────────────────────────────────────────────────────

@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "1.1.0" in result.stdout
+        assert "1.2.0" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(
@@ -61,6 +61,22 @@ class TestCLISubprocess:
         assert "list" in result.stdout
         assert "set-tags" in result.stdout
         assert "transfer" in result.stdout
+        assert "export" in result.stdout
+        assert "import" in result.stdout
+
+    def test_status_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "status", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "overview" in result.stdout.lower()
+
+    def test_execution_watch_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "execution", "watch", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "interval" in result.stdout
 
     def test_credential_help(self):
         result = subprocess.run(

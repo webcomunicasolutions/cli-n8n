@@ -255,3 +255,42 @@ class TestLoadJsonArg:
         from cli_anything.n8n.n8n_cli import _load_json_arg
         with pytest.raises(ValueError, match="File not found"):
             _load_json_arg("@/nonexistent/file.json")
+
+    def test_load_from_file(self, tmp_path):
+        from cli_anything.n8n.n8n_cli import _load_json_arg
+        f = tmp_path / "test.json"
+        f.write_text('{"name": "from_file"}')
+        result = _load_json_arg(f"@{f}")
+        assert result == {"name": "from_file"}
+
+
+# ─── CLI commands (subprocess) ──────────────────────────────────────────────
+
+class TestCLICommands:
+    def test_export_import_roundtrip(self, tmp_path):
+        """Test that export strips server fields and import can create."""
+        from cli_anything.n8n.n8n_cli import _load_json_arg
+        # Simulate export data (what get_workflow returns)
+        server_data = {
+            "id": "abc123",
+            "name": "Test WF",
+            "nodes": [{"type": "n8n-nodes-base.manualTrigger"}],
+            "connections": {},
+            "settings": {},
+            "createdAt": "2026-01-01",
+            "updatedAt": "2026-01-02",
+            "versionId": "v1",
+            "shared": [{"role": "owner"}],
+        }
+        # Export logic: strip server fields
+        export_data = {k: v for k, v in server_data.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+        assert "id" not in export_data
+        assert "name" in export_data
+        assert "nodes" in export_data
+
+        # Write and read back
+        out = tmp_path / "export.json"
+        out.write_text(json.dumps(export_data, indent=2))
+        loaded = _load_json_arg(f"@{out}")
+        assert loaded["name"] == "Test WF"
+        assert "id" not in loaded

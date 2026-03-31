@@ -93,12 +93,72 @@ n8n> exit
 
 | Group | Commands | What it does |
 |-------|----------|--------------|
-| **workflow** | list, get, create, update, delete, activate, deactivate, tags, set-tags, transfer | Manage your workflows |
-| **execution** | list, get, delete, retry | Check and retry executions |
+| **workflow** | list, get, create, update, delete, activate, deactivate, tags, set-tags, transfer, **export**, **import** | Manage your workflows |
+| **execution** | list, get, delete, retry, **watch** | Check, retry, and monitor executions |
 | **credential** | create, delete, schema, transfer | Manage credentials |
 | **variable** | list, create, update, delete | Manage environment variables |
 | **tag** | list, get, create, update, delete | Organize with tags |
 | **config** | show, set | Save your connection settings |
+
+### Export and import workflows
+
+Move workflows between n8n instances or keep backups:
+
+```bash
+# Export a workflow to a JSON file
+cli-anything-n8n workflow export ABC123
+# -> saves "My_Workflow.json"
+
+# Export with custom filename
+cli-anything-n8n workflow export ABC123 -o backup.json
+
+# Import into another instance
+cli-anything-n8n workflow import backup.json
+
+# Import with a new name
+cli-anything-n8n workflow import backup.json --name "Copy of My Workflow"
+```
+
+### Status dashboard
+
+See everything at a glance:
+
+```bash
+cli-anything-n8n status
+```
+
+```
+  n8n Status Dashboard
+  ========================================
+
+  Workflows
+    Total:    42
+    Active:   15
+    Inactive: 27
+
+  Recent Executions (last 10)
+    180357   success   wf:cLUnUzjQGfAClPNC  2026-03-31 20:24:00
+    180356   success   wf:cLUnUzjQGfAClPNC  2026-03-31 20:23:30
+    180355   error     wf:ABC123             2026-03-31 20:23:00
+
+  Errors: 1 in last 10 executions
+    Last error: execution 180355 (wf:ABC123) at 2026-03-31 20:23:0
+```
+
+### Watch executions live
+
+Monitor your n8n in real-time:
+
+```bash
+# Watch all executions (updates every 5 seconds)
+cli-anything-n8n execution watch
+
+# Watch a specific workflow
+cli-anything-n8n execution watch --workflow-id ABC123
+
+# Custom interval
+cli-anything-n8n execution watch --interval 10
+```
 
 ### Save your connection
 
@@ -259,6 +319,39 @@ n8n> exit
 | **variable** | list, create, update, delete | Gestionar variables de entorno |
 | **tag** | list, get, create, update, delete | Organizar con tags |
 | **config** | show, set | Guardar configuracion de conexion |
+
+### Exportar e importar workflows
+
+Mueve workflows entre instancias o haz backups:
+
+```bash
+# Exportar un workflow a JSON
+cli-anything-n8n workflow export ABC123
+
+# Importar en otra instancia
+cli-anything-n8n workflow import backup.json
+
+# Importar con otro nombre
+cli-anything-n8n workflow import backup.json --name "Copia de Mi Workflow"
+```
+
+### Dashboard de estado
+
+Ver todo de un vistazo:
+
+```bash
+cli-anything-n8n status
+```
+
+### Monitoreo en tiempo real
+
+```bash
+# Ver ejecuciones en vivo (cada 5 segundos)
+cli-anything-n8n execution watch
+
+# Solo un workflow
+cli-anything-n8n execution watch --workflow-id ABC123
+```
 
 ### Guardar conexion
 
