@@ -10,7 +10,10 @@ readme = "cli_anything/n8n/README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Webcomunica Solutions", email = "info@webcomunica.com"},
+    {name = "Juan Jose Sanchez Bernal", email = "info@webcomunica.solutions"},
+]
+maintainers = [
+    {name = "Webcomunica Solutions", email = "info@webcomunica.solutions"},
 ]
 keywords = ["n8n", "cli", "workflow", "automation", "cli-anything", "ai-agent"]
 classifiers = [
@@ -36,9 +39,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/webcomunicasolutions/cli-n8n"
+Homepage = "https://webcomunica.solutions"
+Documentation = "https://optimizaconia.es"
 Repository = "https://github.com/webcomunicasolutions/cli-n8n"
 Issues = "https://github.com/webcomunicasolutions/cli-n8n/issues"
+Changelog = "https://github.com/webcomunicasolutions/cli-n8n/blob/main/CHANGELOG.md"
 
 [project.scripts]
 cli-anything-n8n = "cli_anything.n8n.n8n_cli:main"
