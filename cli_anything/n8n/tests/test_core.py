@@ -45,6 +45,7 @@ class TestBackend:
         url = n8n_backend._url(BASE, "/api/v1/workflows")
         assert url == f"{BASE}/api/v1/workflows"
 
+    @patch.dict("os.environ", {"N8N_BASE_URL": ""}, clear=False)
     def test_url_missing_base(self):
         with pytest.raises(ValueError, match="base URL not configured"):
             n8n_backend._url("", "/workflows")

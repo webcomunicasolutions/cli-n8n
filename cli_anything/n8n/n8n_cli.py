@@ -7,6 +7,7 @@ import sys
 from typing import Any
 
 import click
+import requests
 
 from cli_anything.n8n.core import (
     credentials,
@@ -513,7 +514,23 @@ def table_update_rows(ctx: click.Context, table_id: str, json_data: str) -> None
 # ─── Entry point ────────────────────────────────────────────────────────────
 
 def main() -> None:
-    cli(obj={})
+    try:
+        cli(obj={})
+    except requests.exceptions.HTTPError as exc:
+        status = exc.response.status_code
+        try:
+            body = exc.response.json()
+            msg = body.get("message", str(body))
+        except (ValueError, AttributeError):
+            msg = exc.response.text or str(exc)
+        error(f"{status} — {msg}")
+        sys.exit(1)
+    except requests.exceptions.ConnectionError:
+        error("Cannot connect to n8n. Check your URL and network.")
+        sys.exit(1)
+    except ValueError as exc:
+        error(str(exc))
+        sys.exit(1)
 
 
 if __name__ == "__main__":
