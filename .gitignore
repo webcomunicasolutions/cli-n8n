@@ -33,3 +33,4 @@ Thumbs.db
 .env
 .claude-session
 *.log
+_pendiente_borrado/

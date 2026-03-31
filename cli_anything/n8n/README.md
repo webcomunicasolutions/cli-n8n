@@ -3,8 +3,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![CLI-Anything](https://img.shields.io/badge/CLI--Anything-harness-orange.svg)](https://github.com/HKUDS/CLI-Anything)
-[![n8n](https://img.shields.io/badge/n8n-API%20v1-EA4B71.svg)](https://docs.n8n.io/api/api-reference/)
-[![Tests](https://img.shields.io/badge/tests-29%20passed-brightgreen.svg)]()
+[![n8n API v1.1.1](https://img.shields.io/badge/n8n-API%20v1.1.1-EA4B71.svg)](https://docs.n8n.io/api/api-reference/)
+[![n8n >= 1.0.0](https://img.shields.io/badge/n8n-%3E%3D%201.0.0-EA4B71.svg)]()
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)]()
 
 > [Leer en Español](#spanish) | [Read in English](#english)
 
@@ -16,14 +17,15 @@
 
 CLI harness for [n8n](https://n8n.io) workflow automation — built with the [CLI-Anything](https://github.com/HKUDS/CLI-Anything) pattern.
 
-This project was created as a **community contribution** to bring n8n into the CLI-Anything ecosystem, making it controllable by AI agents and terminal power users alike.
+Created as a **community contribution** to bring n8n into the CLI-Anything ecosystem. Verified against the **n8n OpenAPI spec v1.1.1** (n8n 2.43.0) — only endpoints that actually exist in the public API are exposed.
 
 ### Features
 
-- **Full n8n REST API coverage**: workflows, executions, credentials, variables, tags, data tables (44+ endpoints)
-- **Interactive REPL mode** with colored output and table formatting
+- **Verified n8n Public API coverage**: workflows, executions, credentials, variables, tags
+- **Interactive REPL mode** with colored output, truncation indicators, and table formatting
 - **JSON output** for AI agent consumption (`--json`)
 - **Config persistence** at `~/.cli-anything/n8n/config.json`
+- **Robust error handling**: clean messages for HTTP errors, connection failures, invalid JSON
 - **PEP 420 namespace packaging** — coexists with other CLI-Anything harnesses
 
 ### Quick Start
@@ -38,44 +40,53 @@ export N8N_API_KEY=your-api-key
 # Use
 cli-anything-n8n workflow list
 cli-anything-n8n --json execution list --status error
-cli-anything-n8n variable create MY_VAR "my value"
+cli-anything-n8n tag create "production"
 ```
 
 Or use the interactive REPL:
 
 ```bash
 cli-anything-n8n
-n8n> workflow list
+n8n> workflow list --active
 n8n> execution list --status error
 n8n> exit
 ```
 
 ### Command Groups
 
-| Group | Commands | Endpoints |
-|-------|----------|-----------|
-| `workflow` | list, get, create, update, delete, activate, deactivate, tags | 11 |
-| `execution` | list, get, delete, retry, stop | 8 |
-| `credential` | list, create, update, delete, schema | 6 |
+| Group | Commands | API Endpoints |
+|-------|----------|---------------|
+| `workflow` | list, get, create, update, delete, activate, deactivate, tags, set-tags, transfer | 9 |
+| `execution` | list, get, delete, retry | 4 |
+| `credential` | create, delete, schema, transfer | 4 |
 | `variable` | list, create, update, delete | 4 |
 | `tag` | list, get, create, update, delete | 5 |
-| `table` | list, get, create, delete, rows, insert, update-rows | 10 |
 | `config` | show, set | - |
+
+> **Note**: Some n8n features (Data Tables, credential listing, execution stop) are not available through the public API. This CLI only exposes verified, working endpoints.
 
 ### Configuration
 
 Three ways to configure (in priority order):
 
 1. **CLI flags**: `--url` and `--api-key`
-2. **Environment variables**: `N8N_BASE_URL` and `N8N_API_KEY`
+2. **Environment variables**: `N8N_BASE_URL`, `N8N_API_KEY`, `N8N_TIMEOUT`
 3. **Config file**: `cli-anything-n8n config set base_url https://...`
 
 ### For AI Agents
 
 - Always use `--json` for structured, parseable output
-- Use `@file.json` to pass complex JSON payloads: `cli-anything-n8n workflow create @my-workflow.json`
+- Use `@file.json` to pass complex JSON payloads
 - Check return codes: 0 = success, non-zero = error
 - Workflow and execution IDs are strings
+- Set `N8N_TIMEOUT` env var for long-running operations (default: 30s)
+
+### n8n Compatibility
+
+| n8n Version | API Version | Status |
+|-------------|-------------|--------|
+| >= 1.0.0 | v1.1.1 | Verified |
+| 2.43.0 | v1.1.1 | Tested (E2E) |
 
 ### Development
 
@@ -93,21 +104,19 @@ pytest cli_anything/n8n/tests/test_full_e2e.py -v     # E2E (requires running n8
 cli_anything/n8n/
 ├── n8n_cli.py              # Click CLI + REPL
 ├── core/                   # Business logic (thin API wrappers)
-│   ├── workflows.py        # Workflow CRUD, activate/deactivate
-│   ├── executions.py       # Execution management
-│   ├── credentials.py      # Credential CRUD + schema
+│   ├── workflows.py        # Workflow CRUD, activate/deactivate, tags, transfer
+│   ├── executions.py       # Execution list, get, delete, retry
+│   ├── credentials.py      # Credential create, delete, schema, transfer
 │   ├── variables.py        # Variable CRUD
 │   ├── tags.py             # Tag CRUD
-│   ├── tables.py           # Data Table + Row CRUD
-│   ├── project.py          # Config load/save
-│   └── session.py          # REPL state
+│   └── project.py          # Config load/save
 ├── utils/
-│   ├── n8n_backend.py      # HTTP client (single point of contact with n8n API)
+│   ├── n8n_backend.py      # HTTP client (sole point of contact with n8n API)
 │   └── repl_skin.py        # Terminal UI (banner, colors, tables)
 ├── skills/
 │   └── SKILL.md            # AI agent discovery document
 └── tests/
-    ├── test_core.py        # 29 unit tests (mocked)
+    ├── test_core.py        # Unit tests (mocked)
     └── test_full_e2e.py    # E2E lifecycle tests
 ```
 
@@ -123,14 +132,15 @@ MIT
 
 CLI harness para [n8n](https://n8n.io) (automatizacion de workflows) — construido con el patron [CLI-Anything](https://github.com/HKUDS/CLI-Anything).
 
-Este proyecto fue creado como **contribucion a la comunidad** para integrar n8n en el ecosistema CLI-Anything, haciendolo controlable por agentes IA y usuarios avanzados de terminal.
+Creado como **contribucion a la comunidad** para integrar n8n en el ecosistema CLI-Anything. Verificado contra la **especificacion OpenAPI v1.1.1 de n8n** (n8n 2.43.0) — solo se exponen endpoints que realmente existen en la API publica.
 
 ### Caracteristicas
 
-- **Cobertura completa de la API REST de n8n**: workflows, ejecuciones, credenciales, variables, tags, data tables (44+ endpoints)
-- **Modo REPL interactivo** con salida coloreada y tablas formateadas
+- **Cobertura verificada de la API publica de n8n**: workflows, ejecuciones, credenciales, variables, tags
+- **Modo REPL interactivo** con salida coloreada, indicadores de truncado y tablas
 - **Salida JSON** para consumo por agentes IA (`--json`)
 - **Configuracion persistente** en `~/.cli-anything/n8n/config.json`
+- **Manejo robusto de errores**: mensajes claros para errores HTTP, fallos de conexion, JSON invalido
 - **PEP 420 namespace packaging** — coexiste con otros harnesses de CLI-Anything
 
 ### Inicio rapido
@@ -145,44 +155,28 @@ export N8N_API_KEY=tu-api-key
 # Usar
 cli-anything-n8n workflow list
 cli-anything-n8n --json execution list --status error
-cli-anything-n8n variable create MI_VAR "mi valor"
-```
-
-O usa el REPL interactivo:
-
-```bash
-cli-anything-n8n
-n8n> workflow list
-n8n> execution list --status error
-n8n> exit
+cli-anything-n8n tag create "produccion"
 ```
 
 ### Grupos de comandos
 
-| Grupo | Comandos | Endpoints |
-|-------|----------|-----------|
-| `workflow` | list, get, create, update, delete, activate, deactivate, tags | 11 |
-| `execution` | list, get, delete, retry, stop | 8 |
-| `credential` | list, create, update, delete, schema | 6 |
+| Grupo | Comandos | Endpoints API |
+|-------|----------|---------------|
+| `workflow` | list, get, create, update, delete, activate, deactivate, tags, set-tags, transfer | 9 |
+| `execution` | list, get, delete, retry | 4 |
+| `credential` | create, delete, schema, transfer | 4 |
 | `variable` | list, create, update, delete | 4 |
 | `tag` | list, get, create, update, delete | 5 |
-| `table` | list, get, create, delete, rows, insert, update-rows | 10 |
 | `config` | show, set | - |
 
-### Configuracion
+> **Nota**: Algunas funcionalidades de n8n (Data Tables, listar credenciales, parar ejecuciones) no estan disponibles via la API publica. Este CLI solo expone endpoints verificados y funcionales.
 
-Tres formas de configurar (por orden de prioridad):
+### Compatibilidad con n8n
 
-1. **Flags del CLI**: `--url` y `--api-key`
-2. **Variables de entorno**: `N8N_BASE_URL` y `N8N_API_KEY`
-3. **Archivo de config**: `cli-anything-n8n config set base_url https://...`
-
-### Para agentes IA
-
-- Usar siempre `--json` para salida estructurada y parseable
-- Usar `@archivo.json` para payloads complejos: `cli-anything-n8n workflow create @mi-workflow.json`
-- Verificar codigos de retorno: 0 = exito, distinto de 0 = error
-- Los IDs de workflows y ejecuciones son strings
+| Version n8n | Version API | Estado |
+|-------------|-------------|--------|
+| >= 1.0.0 | v1.1.1 | Verificado |
+| 2.43.0 | v1.1.1 | Testeado (E2E) |
 
 ### Desarrollo
 
@@ -190,32 +184,8 @@ Tres formas de configurar (por orden de prioridad):
 git clone https://github.com/webcomunicasolutions/cli-n8n.git
 cd cli-n8n
 pip install -e .
-pytest cli_anything/n8n/tests/test_core.py -v        # tests unitarios (sin n8n)
+pytest cli_anything/n8n/tests/test_core.py -v        # tests unitarios
 pytest cli_anything/n8n/tests/test_full_e2e.py -v     # E2E (requiere n8n corriendo)
-```
-
-### Arquitectura
-
-```
-cli_anything/n8n/
-├── n8n_cli.py              # CLI Click + REPL
-├── core/                   # Logica de negocio (wrappers sobre la API)
-│   ├── workflows.py        # CRUD workflows, activar/desactivar
-│   ├── executions.py       # Gestion de ejecuciones
-│   ├── credentials.py      # CRUD credenciales + schema
-│   ├── variables.py        # CRUD variables
-│   ├── tags.py             # CRUD tags
-│   ├── tables.py           # CRUD Data Tables + filas
-│   ├── project.py          # Carga/guardado de config
-│   └── session.py          # Estado del REPL
-├── utils/
-│   ├── n8n_backend.py      # Cliente HTTP (unico punto de contacto con la API n8n)
-│   └── repl_skin.py        # UI de terminal (banner, colores, tablas)
-├── skills/
-│   └── SKILL.md            # Documento de descubrimiento para agentes IA
-└── tests/
-    ├── test_core.py        # 29 tests unitarios (mockeados)
-    └── test_full_e2e.py    # Tests E2E de ciclo de vida
 ```
 
 ### Licencia

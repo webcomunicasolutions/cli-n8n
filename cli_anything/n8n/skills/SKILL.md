@@ -2,12 +2,14 @@
 name: cli-anything-n8n
 description: >-
   Command-line interface for n8n workflow automation platform.
-  Manages workflows, executions, credentials, variables, tags, and data tables.
+  Manages workflows, executions, credentials, variables, and tags.
+  Based on n8n Public API v1.1.1 (n8n >= 1.0.0).
 ---
 
 # cli-anything-n8n
 
 CLI harness for n8n workflow automation — built with the CLI-Anything pattern.
+Verified against n8n OpenAPI spec v1.1.1.
 
 ## Installation
 
@@ -18,56 +20,31 @@ pip install cli-anything-n8n
 ## Configuration
 
 ```bash
-# Set connection (persisted to ~/.cli-anything/n8n/config.json)
 cli-anything-n8n config set base_url https://your-n8n-instance.com
 cli-anything-n8n config set api_key your-api-key
 
-# Or use environment variables
+# Or environment variables
 export N8N_BASE_URL=https://your-n8n-instance.com
 export N8N_API_KEY=your-api-key
-```
-
-## Usage
-
-### CLI Mode
-
-```bash
-cli-anything-n8n workflow list
-cli-anything-n8n workflow get 123
-cli-anything-n8n execution list --status error --limit 10
-cli-anything-n8n variable create MY_VAR "my value"
-```
-
-### REPL Mode
-
-```bash
-cli-anything-n8n  # starts interactive REPL
-n8n> workflow list
-n8n> execution list --status error
-n8n> exit
+export N8N_TIMEOUT=60  # optional, default 30s
 ```
 
 ## Command Groups
 
-| Group       | Commands                                         |
-|-------------|--------------------------------------------------|
-| workflow    | list, get, create, update, delete, activate, deactivate, tags |
-| execution   | list, get, delete, retry, stop                   |
-| credential  | list, create, update, delete, schema             |
-| variable    | list, create, update, delete                     |
-| tag         | list, get, create, update, delete                |
-| table       | list, get, create, delete, rows, insert, update-rows |
-| config      | show, set                                        |
-
-## Output Formats
-
-- **Human-readable**: default, with colored tables
-- **JSON**: `--json` flag for machine-parseable output
+| Group | Commands |
+|-------|----------|
+| workflow | list, get, create, update, delete, activate, deactivate, tags, set-tags, transfer |
+| execution | list, get, delete, retry |
+| credential | create, delete, schema, transfer |
+| variable | list, create, update, delete |
+| tag | list, get, create, update, delete |
+| config | show, set |
 
 ## For AI Agents
 
 - Always use `--json` flag for structured output
-- Check return codes: 0 = success, non-zero = error
 - Use `@file.json` to pass complex JSON from files
-- Workflow IDs are strings, not integers
-- Use `config set` to persist connection details
+- Check return codes: 0 = success, non-zero = error
+- All IDs are strings, not integers
+- API key is always masked in `config show` output
+- Not available in public API: data tables, credential listing, execution stop

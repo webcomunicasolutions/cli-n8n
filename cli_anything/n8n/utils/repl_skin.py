@@ -103,7 +103,10 @@ def _print_table(rows: list[dict[str, Any]]) -> None:
         for k in simple_keys:
             v = str(row.get(k, ""))
             w = col_widths[k]
-            vals.append(v.ljust(w)[:w])
+            if len(v) > w and w > 3:
+                vals.append(v[: w - 1] + "\u2026")
+            else:
+                vals.append(v.ljust(w)[:w])
         click.echo(" | ".join(vals))
 
 

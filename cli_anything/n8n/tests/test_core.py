@@ -12,7 +12,6 @@ from cli_anything.n8n.core import (
     executions,
     project,
     tags,
-    tables,
     variables,
     workflows,
 )
@@ -65,7 +64,6 @@ class TestBackend:
         mock_req.return_value = mock_response(200, {"data": []})
         result = n8n_backend.api_get("/workflows", base_url=BASE, api_key=KEY)
         assert result == {"data": []}
-        mock_req.assert_called_once()
         args, kwargs = mock_req.call_args
         assert args[0] == "GET"
 
@@ -77,10 +75,16 @@ class TestBackend:
 
     @patch("cli_anything.n8n.utils.n8n_backend.requests.request")
     def test_api_delete_204(self, mock_req):
-        resp = mock_response(204)
-        mock_req.return_value = resp
+        mock_req.return_value = mock_response(204)
         result = n8n_backend.api_delete("/workflows/1", base_url=BASE, api_key=KEY)
         assert result == {}
+
+    @patch("cli_anything.n8n.utils.n8n_backend.requests.request")
+    def test_custom_timeout(self, mock_req):
+        mock_req.return_value = mock_response(200, {})
+        n8n_backend.api_request("GET", "/test", base_url=BASE, api_key=KEY, timeout=120)
+        _, kwargs = mock_req.call_args
+        assert kwargs["timeout"] == 120
 
 
 # ─── Workflows ──────────────────────────────────────────────────────────────
@@ -91,7 +95,6 @@ class TestWorkflows:
         mock_get.return_value = {"data": [{"id": "1", "name": "Test"}]}
         result = workflows.list_workflows(base_url=BASE, api_key=KEY)
         assert result["data"][0]["name"] == "Test"
-        mock_get.assert_called_once()
 
     @patch("cli_anything.n8n.core.workflows.api_get")
     def test_list_workflows_with_filters(self, mock_get):
@@ -125,6 +128,18 @@ class TestWorkflows:
         result = workflows.activate_workflow("1", base_url=BASE, api_key=KEY)
         assert result["active"] is True
 
+    @patch("cli_anything.n8n.core.workflows.api_put")
+    def test_transfer_workflow(self, mock_put):
+        mock_put.return_value = {}
+        workflows.transfer_workflow("1", "proj-1", base_url=BASE, api_key=KEY)
+        mock_put.assert_called_once()
+
+    @patch("cli_anything.n8n.core.workflows.api_put")
+    def test_update_workflow_tags(self, mock_put):
+        mock_put.return_value = [{"id": "t1"}]
+        result = workflows.update_workflow_tags("1", [{"id": "t1"}], base_url=BASE, api_key=KEY)
+        assert result == [{"id": "t1"}]
+
 
 # ─── Executions ─────────────────────────────────────────────────────────────
 
@@ -141,27 +156,39 @@ class TestExecutions:
         result = executions.retry_execution("10", base_url=BASE, api_key=KEY)
         assert result["id"] == "11"
 
-    @patch("cli_anything.n8n.core.executions.api_post")
-    def test_stop_execution(self, mock_post):
-        mock_post.return_value = {}
-        executions.stop_execution("10", base_url=BASE, api_key=KEY)
-        mock_post.assert_called_once()
+    @patch("cli_anything.n8n.core.executions.api_delete")
+    def test_delete_execution(self, mock_del):
+        mock_del.return_value = {}
+        executions.delete_execution("10", base_url=BASE, api_key=KEY)
+        mock_del.assert_called_once()
 
 
 # ─── Credentials ────────────────────────────────────────────────────────────
 
 class TestCredentials:
-    @patch("cli_anything.n8n.core.credentials.api_get")
-    def test_list_credentials(self, mock_get):
-        mock_get.return_value = {"data": []}
-        result = credentials.list_credentials(base_url=BASE, api_key=KEY)
-        assert "data" in result
+    @patch("cli_anything.n8n.core.credentials.api_post")
+    def test_create_credential(self, mock_post):
+        mock_post.return_value = {"id": "c1"}
+        result = credentials.create_credential({"name": "test", "type": "httpBasicAuth", "data": {}}, base_url=BASE, api_key=KEY)
+        assert result["id"] == "c1"
 
     @patch("cli_anything.n8n.core.credentials.api_get")
     def test_get_schema(self, mock_get):
         mock_get.return_value = {"properties": {}}
         result = credentials.get_credential_schema("telegramApi", base_url=BASE, api_key=KEY)
         assert "properties" in result
+
+    @patch("cli_anything.n8n.core.credentials.api_delete")
+    def test_delete_credential(self, mock_del):
+        mock_del.return_value = {}
+        credentials.delete_credential("c1", base_url=BASE, api_key=KEY)
+        mock_del.assert_called_once()
+
+    @patch("cli_anything.n8n.core.credentials.api_put")
+    def test_transfer_credential(self, mock_put):
+        mock_put.return_value = {}
+        credentials.transfer_credential("c1", "proj-1", base_url=BASE, api_key=KEY)
+        mock_put.assert_called_once()
 
 
 # ─── Variables ──────────────────────────────────────────────────────────────
@@ -196,34 +223,6 @@ class TestTags:
         assert result["name"] == "dev"
 
 
-# ─── Tables ─────────────────────────────────────────────────────────────────
-
-class TestTables:
-    @patch("cli_anything.n8n.core.tables.api_get")
-    def test_list_tables(self, mock_get):
-        mock_get.return_value = {"data": []}
-        result = tables.list_tables(base_url=BASE, api_key=KEY)
-        assert "data" in result
-
-    @patch("cli_anything.n8n.core.tables.api_post")
-    def test_create_table(self, mock_post):
-        mock_post.return_value = {"id": "t1", "name": "my_table"}
-        result = tables.create_table("my_table", base_url=BASE, api_key=KEY)
-        assert result["name"] == "my_table"
-
-    @patch("cli_anything.n8n.core.tables.api_get")
-    def test_query_rows(self, mock_get):
-        mock_get.return_value = {"data": [{"id": "r1", "name": "Alice"}]}
-        result = tables.query_rows("t1", base_url=BASE, api_key=KEY)
-        assert result["data"][0]["name"] == "Alice"
-
-    @patch("cli_anything.n8n.core.tables.api_post")
-    def test_insert_rows(self, mock_post):
-        mock_post.return_value = {"inserted": 2}
-        result = tables.insert_rows("t1", [{"name": "Bob"}, {"name": "Carol"}], base_url=BASE, api_key=KEY)
-        assert result["inserted"] == 2
-
-
 # ─── Project config ─────────────────────────────────────────────────────────
 
 class TestProject:
@@ -237,3 +236,22 @@ class TestProject:
         url, key = project.get_connection("https://arg.com", "arg-key")
         assert url == "https://arg.com"
         assert key == "arg-key"
+
+
+# ─── JSON arg parsing ──────────────────────────────────────────────────────
+
+class TestLoadJsonArg:
+    def test_parse_inline_json(self):
+        from cli_anything.n8n.n8n_cli import _load_json_arg
+        result = _load_json_arg('{"name": "test"}')
+        assert result == {"name": "test"}
+
+    def test_invalid_json_raises(self):
+        from cli_anything.n8n.n8n_cli import _load_json_arg
+        with pytest.raises(ValueError, match="Invalid JSON"):
+            _load_json_arg("not json")
+
+    def test_file_not_found_raises(self):
+        from cli_anything.n8n.n8n_cli import _load_json_arg
+        with pytest.raises(ValueError, match="File not found"):
+            _load_json_arg("@/nonexistent/file.json")

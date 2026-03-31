@@ -1,10 +1,15 @@
-"""cli-anything-n8n — CLI for n8n workflow automation."""
+"""cli-anything-n8n — CLI for n8n workflow automation.
+
+Based on n8n Public API v1.1.1 (n8n >= 1.0.0).
+Verified against n8n 2.43.0.
+"""
 
 from __future__ import annotations
 
 import json
 import sys
 from typing import Any
+from urllib.parse import urlparse
 
 import click
 import requests
@@ -14,14 +19,14 @@ from cli_anything.n8n.core import (
     executions,
     project,
     tags,
-    tables,
     variables,
     workflows,
 )
-from cli_anything.n8n.utils.repl_skin import error, output, print_banner, success
+from cli_anything.n8n.utils.repl_skin import error, output, print_banner, success, warn
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
+VERSION = "1.1.0"
 
 
 def _conn(ctx: click.Context) -> dict[str, str]:
@@ -36,9 +41,18 @@ def _json_flag(ctx: click.Context) -> bool:
 def _load_json_arg(value: str) -> Any:
     """Parse a JSON string or read from file if prefixed with @."""
     if value.startswith("@"):
-        with open(value[1:]) as f:
-            return json.load(f)
-    return json.loads(value)
+        filepath = value[1:]
+        try:
+            with open(filepath) as f:
+                return json.load(f)
+        except FileNotFoundError:
+            raise ValueError(f"File not found: {filepath}")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in {filepath}: {e}")
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {e}")
 
 
 # ─── Root ───────────────────────────────────────────────────────────────────
@@ -47,10 +61,10 @@ def _load_json_arg(value: str) -> Any:
 @click.option("--url", default=None, envvar="N8N_BASE_URL", help="n8n instance URL")
 @click.option("--api-key", default=None, envvar="N8N_API_KEY", help="n8n API key")
 @click.option("--json", "as_json", is_flag=True, default=False, help="JSON output")
-@click.version_option(version="1.0.0", prog_name="cli-anything-n8n")
+@click.version_option(version=VERSION, prog_name="cli-anything-n8n")
 @click.pass_context
 def cli(ctx: click.Context, url: str | None, api_key: str | None, as_json: bool) -> None:
-    """CLI harness for n8n workflow automation."""
+    """CLI harness for n8n workflow automation (API v1.1.1, n8n >= 1.0.0)."""
     ctx.ensure_object(dict)
     resolved_url, resolved_key = project.get_connection(url, api_key)
     ctx.obj["base_url"] = resolved_url
@@ -112,9 +126,8 @@ def config_() -> None:
 @config_.command("show")
 @click.pass_context
 def config_show(ctx: click.Context) -> None:
-    """Show current configuration."""
+    """Show current configuration (API key is always masked)."""
     cfg = project.load_config()
-    # Mask the API key for display
     masked = {**cfg}
     if masked.get("api_key"):
         key = masked["api_key"]
@@ -132,6 +145,11 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
     if key not in ("base_url", "api_key"):
         error(f"Unknown config key: {key}. Use: base_url, api_key")
         return
+    if key == "base_url":
+        parsed = urlparse(value)
+        if not parsed.scheme or not parsed.netloc:
+            error(f"Invalid URL: {value} (must include http:// or https://)")
+            return
     cfg[key] = value
     path = project.save_config(cfg)
     success(f"Saved {key} to {path}")
@@ -224,6 +242,26 @@ def workflow_tags(ctx: click.Context, workflow_id: str) -> None:
     output(data, _json_flag(ctx))
 
 
+@workflow_.command("set-tags")
+@click.argument("workflow_id")
+@click.argument("json_data", metavar="TAG_IDS_JSON")
+@click.pass_context
+def workflow_set_tags(ctx: click.Context, workflow_id: str, json_data: str) -> None:
+    """Set workflow tags (JSON array of {id} objects)."""
+    data = workflows.update_workflow_tags(workflow_id, _load_json_arg(json_data), **_conn(ctx))
+    output(data, _json_flag(ctx))
+
+
+@workflow_.command("transfer")
+@click.argument("workflow_id")
+@click.argument("project_id")
+@click.pass_context
+def workflow_transfer(ctx: click.Context, workflow_id: str, project_id: str) -> None:
+    """Transfer a workflow to another project."""
+    workflows.transfer_workflow(workflow_id, project_id, **_conn(ctx))
+    success(f"Workflow {workflow_id} transferred to project {project_id}")
+
+
 # ─── Executions ─────────────────────────────────────────────────────────────
 
 @cli.group("execution")
@@ -274,28 +312,11 @@ def execution_retry(ctx: click.Context, execution_id: str) -> None:
     output(data, _json_flag(ctx))
 
 
-@execution_.command("stop")
-@click.argument("execution_id")
-@click.pass_context
-def execution_stop(ctx: click.Context, execution_id: str) -> None:
-    """Stop a running execution."""
-    data = executions.stop_execution(execution_id, **_conn(ctx))
-    output(data, _json_flag(ctx))
-
-
 # ─── Credentials ────────────────────────────────────────────────────────────
 
 @cli.group("credential")
 def credential_() -> None:
-    """Credential management."""
-
-
-@credential_.command("list")
-@click.pass_context
-def credential_list(ctx: click.Context) -> None:
-    """List credentials."""
-    data = credentials.list_credentials(**_conn(ctx))
-    output(data, _json_flag(ctx))
+    """Credential management (limited by n8n API — no list/update)."""
 
 
 @credential_.command("create")
@@ -304,16 +325,6 @@ def credential_list(ctx: click.Context) -> None:
 def credential_create(ctx: click.Context, json_data: str) -> None:
     """Create a credential from JSON."""
     data = credentials.create_credential(_load_json_arg(json_data), **_conn(ctx))
-    output(data, _json_flag(ctx))
-
-
-@credential_.command("update")
-@click.argument("credential_id")
-@click.argument("json_data")
-@click.pass_context
-def credential_update(ctx: click.Context, credential_id: str, json_data: str) -> None:
-    """Update a credential."""
-    data = credentials.update_credential(credential_id, _load_json_arg(json_data), **_conn(ctx))
     output(data, _json_flag(ctx))
 
 
@@ -334,6 +345,16 @@ def credential_schema(ctx: click.Context, credential_type: str) -> None:
     """Get credential schema for a type."""
     data = credentials.get_credential_schema(credential_type, **_conn(ctx))
     output(data, _json_flag(ctx))
+
+
+@credential_.command("transfer")
+@click.argument("credential_id")
+@click.argument("project_id")
+@click.pass_context
+def credential_transfer(ctx: click.Context, credential_id: str, project_id: str) -> None:
+    """Transfer a credential to another project."""
+    credentials.transfer_credential(credential_id, project_id, **_conn(ctx))
+    success(f"Credential {credential_id} transferred to project {project_id}")
 
 
 # ─── Variables ──────────────────────────────────────────────────────────────
@@ -432,83 +453,6 @@ def tag_delete(ctx: click.Context, tag_id: str) -> None:
     """Delete a tag."""
     tags.delete_tag(tag_id, **_conn(ctx))
     success(f"Tag {tag_id} deleted")
-
-
-# ─── Data Tables ────────────────────────────────────────────────────────────
-
-@cli.group("table")
-def table_() -> None:
-    """Data Table management."""
-
-
-@table_.command("list")
-@click.option("--limit", default=50, type=int)
-@click.pass_context
-def table_list(ctx: click.Context, limit: int) -> None:
-    """List data tables."""
-    data = tables.list_tables(**_conn(ctx), limit=limit)
-    output(data, _json_flag(ctx))
-
-
-@table_.command("get")
-@click.argument("table_id")
-@click.pass_context
-def table_get(ctx: click.Context, table_id: str) -> None:
-    """Get table details."""
-    data = tables.get_table(table_id, **_conn(ctx))
-    output(data, _json_flag(ctx))
-
-
-@table_.command("create")
-@click.argument("name")
-@click.option("--columns", default=None, help="Columns as JSON array")
-@click.pass_context
-def table_create(ctx: click.Context, name: str, columns: str | None) -> None:
-    """Create a data table."""
-    cols = json.loads(columns) if columns else None
-    data = tables.create_table(name, cols, **_conn(ctx))
-    output(data, _json_flag(ctx))
-
-
-@table_.command("delete")
-@click.argument("table_id")
-@click.confirmation_option(prompt="Are you sure you want to delete this table?")
-@click.pass_context
-def table_delete(ctx: click.Context, table_id: str) -> None:
-    """Delete a data table."""
-    tables.delete_table(table_id, **_conn(ctx))
-    success(f"Table {table_id} deleted")
-
-
-@table_.command("rows")
-@click.argument("table_id")
-@click.option("--limit", default=50, type=int)
-@click.option("--cursor", default=None)
-@click.pass_context
-def table_rows(ctx: click.Context, table_id: str, limit: int, cursor: str | None) -> None:
-    """Query rows from a data table."""
-    data = tables.query_rows(table_id, **_conn(ctx), limit=limit, cursor=cursor)
-    output(data, _json_flag(ctx))
-
-
-@table_.command("insert")
-@click.argument("table_id")
-@click.argument("json_data")
-@click.pass_context
-def table_insert(ctx: click.Context, table_id: str, json_data: str) -> None:
-    """Insert rows into a data table (JSON array or @file.json)."""
-    data = tables.insert_rows(table_id, _load_json_arg(json_data), **_conn(ctx))
-    output(data, _json_flag(ctx))
-
-
-@table_.command("update-rows")
-@click.argument("table_id")
-@click.argument("json_data")
-@click.pass_context
-def table_update_rows(ctx: click.Context, table_id: str, json_data: str) -> None:
-    """Update rows in a data table."""
-    data = tables.update_rows(table_id, _load_json_arg(json_data), **_conn(ctx))
-    output(data, _json_flag(ctx))
 
 
 # ─── Entry point ────────────────────────────────────────────────────────────

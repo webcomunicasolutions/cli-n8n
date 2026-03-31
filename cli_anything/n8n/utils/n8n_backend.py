@@ -9,7 +9,11 @@ from typing import Any
 import requests
 
 
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = int(os.environ.get("N8N_TIMEOUT", "30"))
+
+# n8n Public API version supported
+MIN_N8N_VERSION = "1.0.0"
+API_VERSION = "v1"
 
 
 def _get_base_url() -> str:
@@ -34,7 +38,7 @@ def _url(base_url: str | None, path: str) -> str:
         raise ValueError(
             "n8n base URL not configured. Set N8N_BASE_URL env var or pass --url."
         )
-    api_prefix = "/api/v1"
+    api_prefix = f"/api/{API_VERSION}"
     if path.startswith("/api/"):
         return f"{base}{path}"
     return f"{base}{api_prefix}{path}"
@@ -57,7 +61,7 @@ def api_request(
     api_key: str | None = None,
     params: dict[str, Any] | None = None,
     json_data: Any | None = None,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: int | None = None,
 ) -> Any:
     """Execute an HTTP request against the n8n API."""
     url = _url(base_url, endpoint)
@@ -68,7 +72,7 @@ def api_request(
         headers=headers,
         params=params,
         json=json_data,
-        timeout=timeout,
+        timeout=timeout or DEFAULT_TIMEOUT,
     )
     resp.raise_for_status()
     return _handle_response(resp)
