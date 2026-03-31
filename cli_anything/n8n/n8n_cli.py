@@ -28,7 +28,9 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "1.2.0"
+VERSION = "1.3.0"
+
+STATUS_COLORS = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan", "new": "blue"}
 
 
 def _conn(ctx: click.Context) -> dict[str, str]:
@@ -169,6 +171,61 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
     success(f"Saved {key} to {path}")
 
 
+@config_.command("test")
+@click.pass_context
+def config_test(ctx: click.Context) -> None:
+    """Test connection to your n8n instance."""
+    conn = _conn(ctx)
+    if not conn["base_url"]:
+        error("No URL configured. Run: cli-anything-n8n config set base_url https://...")
+        return
+    if not conn["api_key"]:
+        error("No API key configured. Run: cli-anything-n8n config set api_key YOUR_KEY")
+        return
+    try:
+        data = workflows.list_workflows(**conn, limit=1)
+        count = len(data.get("data", [])) if isinstance(data, dict) else 0
+        success(f"Connected to {conn['base_url']}")
+        click.echo(f"    API is responding. Found workflows.")
+    except requests.exceptions.ConnectionError:
+        error(f"Cannot connect to {conn['base_url']}")
+    except requests.exceptions.HTTPError as exc:
+        status_code = exc.response.status_code
+        if status_code == 401:
+            error("API key is invalid or expired.")
+        elif status_code == 403:
+            error("API key does not have permission.")
+        else:
+            error(f"API returned {status_code}")
+
+
+# ─── Shell Completions ─────────────────────────────────────────────────────
+
+@cli.command("completions")
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def install_completions(shell: str) -> None:
+    """Generate shell completion script (bash, zsh, fish)."""
+    import subprocess
+    env_var = "_CLI_ANYTHING_N8N_COMPLETE"
+    shell_map = {"bash": "bash_source", "zsh": "zsh_source", "fish": "fish_source"}
+    result = subprocess.run(
+        ["cli-anything-n8n"],
+        capture_output=True, text=True, timeout=5,
+        env={**__import__("os").environ, env_var: shell_map[shell]},
+    )
+    if result.stdout:
+        click.echo(result.stdout)
+        click.echo(f"\n# To install, run:", err=True)
+        if shell == "bash":
+            click.echo(f'# cli-anything-n8n completions bash >> ~/.bashrc', err=True)
+        elif shell == "zsh":
+            click.echo(f'# cli-anything-n8n completions zsh >> ~/.zshrc', err=True)
+        elif shell == "fish":
+            click.echo(f'# cli-anything-n8n completions fish > ~/.config/fish/completions/cli-anything-n8n.fish', err=True)
+    else:
+        success(f"Shell completions for {shell} generated. Paste output into your shell config.")
+
+
 # ─── Workflows ──────────────────────────────────────────────────────────────
 
 @cli.group("workflow")
@@ -189,6 +246,27 @@ def workflow_list(ctx: click.Context, active: bool | None, tag_filter: str | Non
         **_conn(ctx), active=active, tags=tag_filter, name=name, limit=limit, cursor=cursor,
     )
     output(data, _json_flag(ctx))
+
+
+@workflow_.command("search")
+@click.argument("query")
+@click.option("--active/--inactive", default=None, help="Filter by active status")
+@click.pass_context
+def workflow_search(ctx: click.Context, query: str, active: bool | None) -> None:
+    """Search workflows by name (case-insensitive)."""
+    data = workflows.list_workflows(**_conn(ctx), limit=200, active=active)
+    wf_list = data.get("data", []) if isinstance(data, dict) else data
+    query_lower = query.lower()
+    matches = [w for w in wf_list if query_lower in w.get("name", "").lower()]
+    if _json_flag(ctx):
+        output({"data": matches}, True)
+    elif not matches:
+        warn(f"No workflows matching '{query}'")
+    else:
+        click.secho(f"  Found {len(matches)} workflow(s) matching '{query}':\n", fg="cyan")
+        for w in matches:
+            status_str = click.style("active", fg="green") if w.get("active") else click.style("inactive", fg="bright_black")
+            click.echo(f"    {w.get('id', '?'):>16s}  {status_str}  {w.get('name', '?')}")
 
 
 @workflow_.command("get")
@@ -308,6 +386,70 @@ def workflow_import(ctx: click.Context, file_path: str, name: str | None) -> Non
     result = workflows.create_workflow(data, **_conn(ctx))
     success(f"Imported as workflow {result.get('id', '?')} — {result.get('name', '?')}")
     output(result, _json_flag(ctx))
+
+
+@workflow_.command("bulk-activate")
+@click.option("--tag", default=None, help="Activate all workflows with this tag")
+@click.option("--search", default=None, help="Activate all workflows matching name")
+@click.pass_context
+def workflow_bulk_activate(ctx: click.Context, tag: str | None, search: str | None) -> None:
+    """Activate multiple workflows by tag or name search."""
+    if not tag and not search:
+        error("Provide --tag or --search to select workflows")
+        return
+    conn = _conn(ctx)
+    data = workflows.list_workflows(**conn, tags=tag, limit=200)
+    wf_list = data.get("data", []) if isinstance(data, dict) else data
+    if search:
+        q = search.lower()
+        wf_list = [w for w in wf_list if q in w.get("name", "").lower()]
+    inactive = [w for w in wf_list if not w.get("active")]
+    if not inactive:
+        warn("No inactive workflows found matching criteria")
+        return
+    click.echo(f"  Activating {len(inactive)} workflow(s)...")
+    ok, fail = 0, 0
+    for w in inactive:
+        try:
+            workflows.activate_workflow(w["id"], **conn)
+            click.secho(f"    {w['id']}  {w.get('name', '?')}", fg="green")
+            ok += 1
+        except Exception as exc:
+            click.secho(f"    {w['id']}  {w.get('name', '?')} — {exc}", fg="red")
+            fail += 1
+    success(f"Activated {ok}, failed {fail}")
+
+
+@workflow_.command("bulk-deactivate")
+@click.option("--tag", default=None, help="Deactivate all workflows with this tag")
+@click.option("--search", default=None, help="Deactivate all workflows matching name")
+@click.pass_context
+def workflow_bulk_deactivate(ctx: click.Context, tag: str | None, search: str | None) -> None:
+    """Deactivate multiple workflows by tag or name search."""
+    if not tag and not search:
+        error("Provide --tag or --search to select workflows")
+        return
+    conn = _conn(ctx)
+    data = workflows.list_workflows(**conn, tags=tag, limit=200)
+    wf_list = data.get("data", []) if isinstance(data, dict) else data
+    if search:
+        q = search.lower()
+        wf_list = [w for w in wf_list if q in w.get("name", "").lower()]
+    active = [w for w in wf_list if w.get("active")]
+    if not active:
+        warn("No active workflows found matching criteria")
+        return
+    click.echo(f"  Deactivating {len(active)} workflow(s)...")
+    ok, fail = 0, 0
+    for w in active:
+        try:
+            workflows.deactivate_workflow(w["id"], **conn)
+            click.secho(f"    {w['id']}  {w.get('name', '?')}", fg="bright_black")
+            ok += 1
+        except Exception as exc:
+            click.secho(f"    {w['id']}  {w.get('name', '?')} — {exc}", fg="red")
+            fail += 1
+    success(f"Deactivated {ok}, failed {fail}")
 
 
 # ─── Executions ─────────────────────────────────────────────────────────────

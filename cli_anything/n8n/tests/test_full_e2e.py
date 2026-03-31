@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "1.2.0" in result.stdout
+        assert "1.3.0" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(
@@ -77,6 +77,35 @@ class TestCLISubprocess:
         )
         assert result.returncode == 0
         assert "interval" in result.stdout
+
+    def test_config_test_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "config", "test", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "connection" in result.stdout.lower()
+
+    def test_workflow_search_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "search", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "QUERY" in result.stdout
+
+    def test_workflow_bulk_activate_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "bulk-activate", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "--tag" in result.stdout
+        assert "--search" in result.stdout
+
+    def test_completions_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "completions", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "bash" in result.stdout
 
     def test_credential_help(self):
         result = subprocess.run(

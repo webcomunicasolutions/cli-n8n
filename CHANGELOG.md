@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.0] - 2026-04-01
+
+### Added
+- `config test` — verify your n8n connection works before doing anything
+- `workflow search <query>` — find workflows by name (case-insensitive)
+- `workflow bulk-activate --tag X` / `--search X` — activate multiple workflows at once
+- `workflow bulk-deactivate --tag X` / `--search X` — deactivate multiple workflows at once
+- `completions bash|zsh|fish` — generate shell completion scripts
+- Colored status/active columns in table output (green=success, red=error, etc.)
+
 ## [1.2.0] - 2026-04-01
 
 ### Added
