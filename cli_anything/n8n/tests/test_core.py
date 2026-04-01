@@ -379,6 +379,29 @@ class TestFixers:
         assert len(fixes) == 0
 
 
+class TestNodes:
+    @patch("cli_anything.n8n.core.nodes.requests.get")
+    def test_search_nodes(self, mock_get):
+        from cli_anything.n8n.core import nodes as nd
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"total": 100, "objects": [{"package": {"name": "n8n-nodes-test", "version": "1.0.0", "description": "Test", "publisher": {"username": "dev"}}}]}
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+        result = nd.search_nodes("test")
+        assert result["total"] == 100
+
+    @patch("cli_anything.n8n.core.nodes.requests.get")
+    def test_get_node_info(self, mock_get):
+        from cli_anything.n8n.core import nodes as nd
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"name": "n8n-nodes-test", "description": "Test pkg", "dist-tags": {"latest": "1.0.0"}, "versions": {"1.0.0": {"license": "MIT", "n8n": {"nodes": [{"type": "testNode"}], "credentials": []}, "keywords": []}}, "author": {"name": "dev"}}
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+        result = nd.get_node_info("n8n-nodes-test")
+        assert result["name"] == "n8n-nodes-test"
+        assert len(result["n8n_nodes"]) == 1
+
+
 class TestScaffolds:
     def test_list_patterns(self):
         from cli_anything.n8n.core.scaffolds import list_patterns

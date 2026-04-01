@@ -20,6 +20,7 @@ from cli_anything.n8n.core import (
     credentials,
     executions,
     expressions,
+    nodes,
     project,
     scaffolds,
     tags,
@@ -32,7 +33,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 STATUS_COLORS = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan", "new": "blue"}
 
@@ -1512,6 +1513,72 @@ def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -
             click.echo(f"  Response: {resp.text[:200]}")
     else:
         error(f"Webhook returned {resp.status_code}: {resp.text[:200]}")
+
+
+# ─── Nodes (npm registry) ───────────────────────────────────────────────────
+
+@cli.group("node")
+def node_() -> None:
+    """Search and explore n8n community nodes (via npm)."""
+
+
+@node_.command("search")
+@click.argument("query")
+@click.option("--limit", default=15, type=int, help="Max results")
+@click.pass_context
+def node_search(ctx: click.Context, query: str, limit: int) -> None:
+    """Search n8n community nodes on npm (26,000+ packages)."""
+    data = nodes.search_nodes(query, limit=limit)
+
+    if _json_flag(ctx):
+        output(data, True)
+        return
+
+    pkgs = data.get("packages", [])
+    if not pkgs:
+        warn(f"No node packages found for '{query}'")
+        return
+
+    click.secho(f"\n  {data['total']:,} packages found for '{query}' (showing {len(pkgs)}):\n", fg="cyan")
+    for p in pkgs:
+        click.echo(f"    {click.style(p['name'], fg='cyan')}")
+        click.secho(f"      v{p['version']}  by {p['author']}  —  {p['description']}", fg="bright_black")
+    click.echo(f"\n  Use: cli-anything-n8n node info <package-name> for details")
+    click.echo()
+
+
+@node_.command("info")
+@click.argument("package_name")
+@click.pass_context
+def node_info(ctx: click.Context, package_name: str) -> None:
+    """Get detailed info about an n8n node package from npm."""
+    data = nodes.get_node_info(package_name)
+
+    if _json_flag(ctx):
+        output(data, True)
+        return
+
+    click.secho(f"\n  {data['name']} v{data['version']}", fg="cyan", bold=True)
+    click.echo(f"  {data['description']}")
+    click.echo(f"  Author: {data['author']}")
+    click.echo(f"  License: {data['license']}")
+    if data.get("homepage"):
+        click.echo(f"  Homepage: {data['homepage']}")
+    click.echo(f"  npm: {data['npm_url']}")
+
+    if data.get("n8n_nodes"):
+        click.secho(f"\n  Nodes provided ({len(data['n8n_nodes'])}):", fg="cyan")
+        for n in data["n8n_nodes"]:
+            click.echo(f"    - {n}")
+
+    if data.get("n8n_credentials"):
+        click.secho(f"\n  Credentials:", fg="cyan")
+        for c in data["n8n_credentials"]:
+            click.echo(f"    - {c}")
+
+    click.secho(f"\n  Install:", fg="green")
+    click.echo(f"    {data['install_cmd']}")
+    click.echo()
 
 
 # ─── Scaffold ───────────────────────────────────────────────────────────────

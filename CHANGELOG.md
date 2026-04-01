@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0] - 2026-04-01
+
+### Added
+- `node search <query>` — search 26,000+ n8n community node packages on npm
+- `node info <package>` — get package details, nodes provided, install command
+- New module: `core/nodes.py`
+
 ## [2.0.0] - 2026-04-01
 
 ### Added

@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "2.0.0" in result.stdout
+        assert "2.1.0" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(
@@ -217,6 +217,20 @@ class TestCLISubprocess:
             [*_resolve_cli(), "expression", "--help"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
+
+    def test_node_search_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "node", "search", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "QUERY" in result.stdout
+
+    def test_node_info_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "node", "info", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "PACKAGE_NAME" in result.stdout
 
     def test_completions_help(self):
         result = subprocess.run(
