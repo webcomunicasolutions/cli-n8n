@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.9] - 2026-04-02
+
+### Fixes (manual review + round 6)
+- **API key in config show**: No longer shows partial key preview — just "configured" or empty
+- Consistent with health --diagnostic which already used this approach
+
 ## [2.1.8] - 2026-04-02
 
 ### Fixes (adversarial security bounty — round 5)

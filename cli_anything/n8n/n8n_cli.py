@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.8"
+VERSION = "2.1.9"
 
 
 def _safe_filename(name: str) -> str:
@@ -184,8 +184,7 @@ def config_show(ctx: click.Context) -> None:
     cfg = project.load_config()
     masked = {**cfg}
     if masked.get("api_key"):
-        key = masked["api_key"]
-        masked["api_key"] = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "****"
+        masked["api_key"] = "****configured****"
     output(masked, _json_flag(ctx))
 
 
