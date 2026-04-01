@@ -21,8 +21,10 @@ DB_PATH = DB_DIR / "versions.db"
 def _connect() -> sqlite3.Connection:
     DB_DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(str(DB_DIR), 0o700)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS workflow_versions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

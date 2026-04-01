@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.2] - 2026-04-01
+
+### Fixes (from review round 2)
+- **SQLite race condition**: Added WAL journal mode + 10s timeout for concurrent access
+- **Filename encoding**: Safe filename sanitization for workflows with unicode/special chars
+- **Watch busy-loop**: Reject `--interval 0` to prevent CPU burn
+- **Duplicate dict key**: Removed duplicate `api_key_set` in health diagnostic
+- **Versions diff same**: Warn when comparing version with itself
+- Added `_safe_filename()` helper for cross-platform filename safety
+
 ## [2.1.1] - 2026-04-01
 
 ### Security Fixes (from 3-agent code review)

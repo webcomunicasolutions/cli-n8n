@@ -7,6 +7,7 @@ Verified against n8n 2.43.0.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -33,7 +34,14 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.1"
+VERSION = "2.1.2"
+
+
+def _safe_filename(name: str) -> str:
+    """Sanitize a string for use as a filename."""
+    name = re.sub(r'[<>:"/\\|?*]', '', name)
+    name = re.sub(r'[\s/\\]+', '_', name)
+    return name[:60] or "workflow"
 
 STATUS_COLORS = {
     "success": "green", "error": "red", "running": "yellow",
@@ -389,7 +397,7 @@ def workflow_export(ctx: click.Context, workflow_id: str, out_path: str | None) 
     """Export a workflow to a JSON file."""
     data = workflows.get_workflow(workflow_id, **_conn(ctx))
     if not out_path:
-        name = data.get("name", workflow_id).replace(" ", "_").replace("/", "_")
+        name = _safe_filename(data.get("name", workflow_id))
         out_path = f"{name}.json"
     # Remove server-specific fields for portability
     export_data = _clean_for_api(data)
@@ -439,7 +447,7 @@ def workflow_backup_all(ctx: click.Context, out_dir: str, active_only: bool) -> 
         try:
             full = workflows.get_workflow(wf_id, **conn)
             export_data = _clean_for_api(full)
-            name_safe = full.get("name", wf_id).replace(" ", "_").replace("/", "_")[:60]
+            name_safe = _safe_filename(full.get("name", wf_id))
             filename = f"{wf_id}_{name_safe}.json"
             (out_path / filename).write_text(json.dumps(export_data, indent=2, default=str))
             click.secho(f"    {wf_id}  {full.get('name', '?')}", fg="green")
@@ -702,6 +710,9 @@ def execution_errors(ctx: click.Context, workflow_id: str | None, limit: int, de
 def execution_watch(ctx: click.Context, workflow_id: str | None, interval: int, limit: int) -> None:
     """Watch executions in real-time (poll mode). Press Ctrl+C to stop."""
     import shutil
+    if interval < 1:
+        error("--interval must be at least 1 second")
+        return
     conn = _conn(ctx)
     click.secho(f"  Watching executions (every {interval}s). Ctrl+C to stop.\n", fg="cyan")
     seen: set[str] = set()
@@ -1294,7 +1305,6 @@ def health_check(ctx: click.Context, diagnostic: bool) -> None:
         import os
         results["diagnostic"] = {
             "base_url": base_url,
-            "api_key_set": bool(conn["api_key"]),
             "api_key_set": bool(conn.get("api_key")),
             "timeout": os.environ.get("N8N_TIMEOUT", "30"),
             "python": sys.version.split()[0],
@@ -1408,6 +1418,9 @@ def versions_show(ctx: click.Context, workflow_id: str, version_number: int) -> 
 @click.pass_context
 def versions_diff(ctx: click.Context, workflow_id: str, version_a: int, version_b: int) -> None:
     """Compare two versions of a workflow."""
+    if version_a == version_b:
+        warn(f"Both versions are the same ({version_a}). Nothing to diff.")
+        return
     import difflib
     snap_a = versions.get_snapshot(workflow_id, version_a)
     snap_b = versions.get_snapshot(workflow_id, version_b)
