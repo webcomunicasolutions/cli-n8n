@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.3"
+VERSION = "2.1.4"
 
 
 def _safe_filename(name: str) -> str:
@@ -316,8 +316,10 @@ def workflow_get(ctx: click.Context, workflow_id: str) -> None:
 @click.argument("json_data")
 @click.pass_context
 def workflow_create(ctx: click.Context, json_data: str) -> None:
-    """Create a workflow from JSON (inline or @file.json)."""
-    data = workflows.create_workflow(_load_json_arg(json_data), **_conn(ctx))
+    """Create a workflow from JSON (inline or @file.json). Workflows are created inactive."""
+    payload = _load_json_arg(json_data)
+    payload.pop("active", None)  # Never auto-activate on create
+    data = workflows.create_workflow(payload, **_conn(ctx))
     output(data, _json_flag(ctx))
 
 
@@ -326,9 +328,11 @@ def workflow_create(ctx: click.Context, json_data: str) -> None:
 @click.argument("json_data")
 @click.pass_context
 def workflow_update(ctx: click.Context, workflow_id: str, json_data: str) -> None:
-    """Update a workflow."""
+    """Update a workflow. Does not change active status — use activate/deactivate."""
     _auto_snapshot(workflow_id, _conn(ctx), "update")
-    data = workflows.update_workflow(workflow_id, _load_json_arg(json_data), **_conn(ctx))
+    payload = _load_json_arg(json_data)
+    payload.pop("active", None)  # Don't change active status via update
+    data = workflows.update_workflow(workflow_id, payload, **_conn(ctx))
     output(data, _json_flag(ctx))
 
 
@@ -414,8 +418,9 @@ def workflow_import(ctx: click.Context, file_path: str, name: str | None) -> Non
     with open(file_path) as f:
         data = json.load(f)
     # Remove fields that would conflict on import
-    for field in ("id", "createdAt", "updatedAt", "versionId", "shared", "active"):
+    for field in ("id", "createdAt", "updatedAt", "versionId", "shared"):
         data.pop(field, None)
+    data["active"] = False  # Never auto-activate imported workflows
     if name:
         data["name"] = name
     result = workflows.create_workflow(data, **_conn(ctx))
@@ -489,8 +494,9 @@ def workflow_restore_all(ctx: click.Context, backup_dir: str, dry_run: bool) -> 
                 click.echo(f"    Would import: {name}")
                 ok += 1
                 continue
-            for field in ("id", "createdAt", "updatedAt", "versionId", "shared", "active"):
+            for field in ("id", "createdAt", "updatedAt", "versionId", "shared"):
                 data.pop(field, None)
+            data["active"] = False  # Never auto-activate restored workflows
             result = workflows.create_workflow(data, **conn)
             click.secho(f"    {result.get('id', '?')}  {name}", fg="green")
             ok += 1
@@ -1003,9 +1009,10 @@ def template_deploy(ctx: click.Context, template_id: int, name: str | None) -> N
     data = templates.get_template(template_id)
     wf_data = data.get("workflow", {}).get("workflow", data.get("workflow", {}))
 
-    # Clean for import
-    for field in ("id", "createdAt", "updatedAt", "versionId", "shared", "active"):
+    # Clean for import — never auto-activate
+    for field in ("id", "createdAt", "updatedAt", "versionId", "shared"):
         wf_data.pop(field, None)
+    wf_data["active"] = False
     if name:
         wf_data["name"] = name
     elif not wf_data.get("name"):

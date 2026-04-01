@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.4] - 2026-04-01
+
+### Security Fixes (review round 3)
+- **Prevent accidental workflow activation**: `create`, `update`, `import`, `restore-all`, `template deploy` now explicitly force `active=False`. Use `activate` command to enable.
+- **npm registry data validation**: Truncate and validate all fields from untrusted npm responses
+- **template deploy**: Force `active=False` on deployed templates
+
 ## [2.1.3] - 2026-04-01
 
 ### Security Fixes (review round 2 — security agent)

@@ -55,22 +55,26 @@ def get_node_info(package_name: str) -> dict[str, Any]:
     latest = data.get("dist-tags", {}).get("latest", "")
     latest_data = data.get("versions", {}).get(latest, {})
 
-    # Extract n8n-specific metadata
-    n8n_meta = latest_data.get("n8n", {})
-    node_list = n8n_meta.get("nodes", [])
-    credential_list = n8n_meta.get("credentials", [])
+    # Extract n8n-specific metadata (validate and limit untrusted data)
+    n8n_meta = latest_data.get("n8n", {}) if isinstance(latest_data.get("n8n"), dict) else {}
+    node_list = n8n_meta.get("nodes", [])[:50] if isinstance(n8n_meta.get("nodes"), list) else []
+    credential_list = n8n_meta.get("credentials", [])[:20] if isinstance(n8n_meta.get("credentials"), list) else []
+
+    pkg_name = str(data.get("name", ""))[:100]
+    author_raw = data.get("author", {})
+    author_name = (author_raw.get("name", "") if isinstance(author_raw, dict) else str(author_raw))[:100]
 
     return {
-        "name": data.get("name", ""),
-        "version": latest,
-        "description": data.get("description", ""),
-        "author": data.get("author", {}).get("name", "") if isinstance(data.get("author"), dict) else str(data.get("author", "")),
-        "license": latest_data.get("license", ""),
-        "homepage": data.get("homepage", ""),
-        "repository": data.get("repository", {}).get("url", "") if isinstance(data.get("repository"), dict) else "",
-        "npm_url": f"https://www.npmjs.com/package/{data.get('name', '')}",
-        "n8n_nodes": [n.get("type", n) if isinstance(n, dict) else n for n in node_list],
-        "n8n_credentials": [c.get("type", c) if isinstance(c, dict) else c for c in credential_list],
-        "install_cmd": f"cd ~/.n8n && npm install {data.get('name', '')}",
+        "name": pkg_name,
+        "version": str(latest)[:20],
+        "description": str(data.get("description", ""))[:500],
+        "author": author_name,
+        "license": str(latest_data.get("license", ""))[:50],
+        "homepage": str(data.get("homepage", ""))[:200],
+        "repository": (data.get("repository", {}).get("url", "") if isinstance(data.get("repository"), dict) else "")[:200],
+        "npm_url": f"https://www.npmjs.com/package/{pkg_name}",
+        "n8n_nodes": [str(n.get("type", n) if isinstance(n, dict) else n)[:100] for n in node_list],
+        "n8n_credentials": [str(c.get("type", c) if isinstance(c, dict) else c)[:100] for c in credential_list],
+        "install_cmd": f"cd ~/.n8n && npm install {pkg_name}",
         "keywords": latest_data.get("keywords", [])[:10],
     }
