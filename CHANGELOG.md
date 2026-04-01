@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.0] - 2026-04-01
+
+### Added
+- `template search <query>` — search 2,700+ templates on n8n.io
+- `template get <id>` — view template details
+- `template deploy <id>` — deploy template directly to your n8n instance
+- `workflow validate <id|@file>` — validate workflow structure (nodes, connections, triggers, duplicates)
+- `workflow test <id>` — trigger webhook-based workflows with test data
+
+### Inspired by
+- Features from [n8n-mcp](https://github.com/czlonkowski/n8n-mcp) adapted for CLI usage
+
 ## [1.4.0] - 2026-04-01
 
 ### Added

@@ -21,6 +21,7 @@ from cli_anything.n8n.core import (
     executions,
     project,
     tags,
+    templates,
     variables,
     workflows,
 )
@@ -28,7 +29,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 STATUS_COLORS = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan", "new": "blue"}
 
@@ -903,6 +904,223 @@ def tag_delete(ctx: click.Context, tag_id: str) -> None:
     """Delete a tag."""
     tags.delete_tag(tag_id, **_conn(ctx))
     success(f"Tag {tag_id} deleted")
+
+
+# ─── Templates (n8n.io) ─────────────────────────────────────────────────────
+
+@cli.group("template")
+def template_() -> None:
+    """Browse and deploy templates from n8n.io (2,700+ templates)."""
+
+
+@template_.command("search")
+@click.argument("query")
+@click.option("--limit", default=10, type=int, help="Max results")
+@click.pass_context
+def template_search(ctx: click.Context, query: str, limit: int) -> None:
+    """Search templates on n8n.io by keyword."""
+    data = templates.search_templates(query, limit=limit)
+    wfs = data.get("workflows", [])
+
+    if _json_flag(ctx):
+        output(data, True)
+        return
+
+    total = data.get("totalWorkflows", 0)
+    click.secho(f"\n  {total} templates found for '{query}' (showing {len(wfs)}):\n", fg="cyan")
+    for w in wfs:
+        views = w.get("totalViews", 0)
+        nodes = len(w.get("nodes", w.get("workflowInfo", {}).get("nodeCount", 0)) if isinstance(w.get("nodes"), list) else [])
+        click.echo(f"    {click.style(str(w['id']), fg='cyan'):>8s}  {w['name'][:60]}")
+        click.secho(f"             {views:,} views  by {w.get('user', {}).get('username', '?')}", fg="bright_black")
+    click.echo()
+
+
+@template_.command("get")
+@click.argument("template_id", type=int)
+@click.pass_context
+def template_get(ctx: click.Context, template_id: int) -> None:
+    """Get template details from n8n.io."""
+    data = templates.get_template(template_id)
+    wf = data.get("workflow", {})
+    if _json_flag(ctx):
+        output(data, True)
+        return
+    click.secho(f"\n  Template #{template_id}: {wf.get('name', '?')}", fg="cyan", bold=True)
+    click.echo(f"  Nodes: {len(wf.get('nodes', []))}")
+    click.echo(f"  Views: {wf.get('totalViews', 0):,}")
+    desc = data.get("description", "")
+    if desc:
+        click.echo(f"  Description: {desc[:200]}")
+    click.echo()
+
+
+@template_.command("deploy")
+@click.argument("template_id", type=int)
+@click.option("--name", default=None, help="Override workflow name")
+@click.pass_context
+def template_deploy(ctx: click.Context, template_id: int, name: str | None) -> None:
+    """Deploy a template from n8n.io directly to your n8n instance."""
+    conn = _conn(ctx)
+    click.echo(f"  Fetching template #{template_id} from n8n.io...")
+    data = templates.get_template(template_id)
+    wf_data = data.get("workflow", {}).get("workflow", data.get("workflow", {}))
+
+    # Clean for import
+    for field in ("id", "createdAt", "updatedAt", "versionId", "shared", "active"):
+        wf_data.pop(field, None)
+    if name:
+        wf_data["name"] = name
+    elif not wf_data.get("name"):
+        wf_data["name"] = f"Template #{template_id}"
+
+    result = workflows.create_workflow(wf_data, **conn)
+    success(f"Deployed as workflow {result.get('id', '?')} — {result.get('name', '?')}")
+    output(result, _json_flag(ctx))
+
+
+# ─── Workflow Validate ──────────────────────────────────────────────────────
+
+@workflow_.command("validate")
+@click.argument("source")
+@click.pass_context
+def workflow_validate(ctx: click.Context, source: str) -> None:
+    """Validate a workflow structure. Use workflow ID or @file.json."""
+    conn = _conn(ctx)
+
+    if source.startswith("@"):
+        data = json.loads(Path(source[1:]).read_text())
+    else:
+        data = workflows.get_workflow(source, **conn)
+
+    issues: list[str] = []
+    warnings: list[str] = []
+
+    # Check basic structure
+    if not data.get("name"):
+        issues.append("Missing workflow name")
+    if not data.get("nodes"):
+        issues.append("No nodes defined")
+    if not isinstance(data.get("connections", {}), dict):
+        issues.append("Invalid connections format (must be object)")
+
+    nodes = data.get("nodes", [])
+    node_names = {n.get("name") for n in nodes}
+
+    # Check each node
+    trigger_count = 0
+    for node in nodes:
+        if not node.get("type"):
+            issues.append(f"Node '{node.get('name', '?')}' has no type")
+        if not node.get("name"):
+            issues.append(f"Node of type '{node.get('type', '?')}' has no name")
+        if "trigger" in node.get("type", "").lower():
+            trigger_count += 1
+
+    if trigger_count == 0:
+        warnings.append("No trigger node found — workflow cannot be activated")
+    if trigger_count > 1:
+        warnings.append(f"Multiple trigger nodes ({trigger_count}) — only one should be active")
+
+    # Check connections reference existing nodes
+    for source_node, conns in data.get("connections", {}).items():
+        if source_node not in node_names:
+            issues.append(f"Connection from non-existent node: '{source_node}'")
+        if isinstance(conns, dict):
+            for conn_type, outputs in conns.items():
+                if isinstance(outputs, list):
+                    for output_list in outputs:
+                        if isinstance(output_list, list):
+                            for target in output_list:
+                                target_name = target.get("node", "")
+                                if target_name and target_name not in node_names:
+                                    issues.append(f"Connection to non-existent node: '{target_name}'")
+
+    # Check for duplicate node names
+    seen_names: set[str] = set()
+    for node in nodes:
+        name = node.get("name", "")
+        if name in seen_names:
+            issues.append(f"Duplicate node name: '{name}'")
+        seen_names.add(name)
+
+    if _json_flag(ctx):
+        output({"valid": len(issues) == 0, "issues": issues, "warnings": warnings}, True)
+        return
+
+    if issues:
+        click.secho(f"\n  INVALID — {len(issues)} issue(s):\n", fg="red", bold=True)
+        for i in issues:
+            click.secho(f"    {i}", fg="red")
+    else:
+        click.secho(f"\n  VALID", fg="green", bold=True)
+
+    if warnings:
+        click.secho(f"\n  {len(warnings)} warning(s):", fg="yellow")
+        for w in warnings:
+            click.secho(f"    {w}", fg="yellow")
+
+    if not issues and not warnings:
+        click.echo(f"  {len(nodes)} nodes, {trigger_count} trigger(s)")
+    click.echo()
+
+
+# ─── Workflow Test (webhook trigger) ────────────────────────────────────────
+
+@workflow_.command("test")
+@click.argument("workflow_id")
+@click.option("--data", "test_data", default=None, help="JSON data to send (inline or @file.json)")
+@click.pass_context
+def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -> None:
+    """Test a workflow by triggering its webhook (workflow must be active with a webhook trigger)."""
+    conn = _conn(ctx)
+    wf = workflows.get_workflow(workflow_id, **conn)
+
+    # Find webhook trigger node
+    webhook_node = None
+    for node in wf.get("nodes", []):
+        node_type = node.get("type", "").lower()
+        if "webhook" in node_type:
+            webhook_node = node
+            break
+
+    if not webhook_node:
+        error("No webhook trigger found in this workflow. Only webhook-triggered workflows can be tested via CLI.")
+        return
+
+    if not wf.get("active"):
+        error(f"Workflow is not active. Run: cli-anything-n8n workflow activate {workflow_id}")
+        return
+
+    # Build webhook URL
+    webhook_path = webhook_node.get("parameters", {}).get("path", "")
+    if not webhook_path:
+        webhook_id = webhook_node.get("webhookId", "")
+        webhook_path = webhook_id or workflow_id
+
+    base = conn["base_url"].rstrip("/")
+    webhook_url = f"{base}/webhook/{webhook_path}"
+
+    payload = _load_json_arg(test_data) if test_data else {}
+
+    click.echo(f"  Triggering webhook: {webhook_url}")
+    resp = requests.post(webhook_url, json=payload, timeout=30)
+
+    if _json_flag(ctx):
+        try:
+            output(resp.json(), True)
+        except (ValueError, AttributeError):
+            output({"status": resp.status_code, "body": resp.text}, True)
+        return
+
+    if resp.ok:
+        success(f"Webhook responded {resp.status_code}")
+        try:
+            output(resp.json(), False)
+        except (ValueError, AttributeError):
+            click.echo(f"  Response: {resp.text[:200]}")
+    else:
+        error(f"Webhook returned {resp.status_code}: {resp.text[:200]}")
 
 
 # ─── Entry point ────────────────────────────────────────────────────────────

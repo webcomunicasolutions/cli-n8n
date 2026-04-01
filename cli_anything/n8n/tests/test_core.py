@@ -294,3 +294,25 @@ class TestCLICommands:
         loaded = _load_json_arg(f"@{out}")
         assert loaded["name"] == "Test WF"
         assert "id" not in loaded
+
+
+class TestTemplates:
+    @patch("cli_anything.n8n.core.templates.requests.get")
+    def test_search_templates(self, mock_get):
+        from cli_anything.n8n.core import templates as tmpl
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"totalWorkflows": 5, "workflows": [{"id": 1, "name": "Test"}]}
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+        result = tmpl.search_templates("telegram")
+        assert result["totalWorkflows"] == 5
+
+    @patch("cli_anything.n8n.core.templates.requests.get")
+    def test_get_template(self, mock_get):
+        from cli_anything.n8n.core import templates as tmpl
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"workflow": {"name": "My Template", "nodes": []}}
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+        result = tmpl.get_template(123)
+        assert result["workflow"]["name"] == "My Template"
