@@ -28,7 +28,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 STATUS_COLORS = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan", "new": "blue"}
 
@@ -388,6 +388,136 @@ def workflow_import(ctx: click.Context, file_path: str, name: str | None) -> Non
     output(result, _json_flag(ctx))
 
 
+@workflow_.command("backup-all")
+@click.option("-d", "--dir", "out_dir", default="n8n-backup", help="Output directory (default: n8n-backup)")
+@click.option("--active-only", is_flag=True, default=False, help="Only backup active workflows")
+@click.pass_context
+def workflow_backup_all(ctx: click.Context, out_dir: str, active_only: bool) -> None:
+    """Backup ALL workflows to a folder (one JSON per workflow)."""
+    conn = _conn(ctx)
+    data = workflows.list_workflows(**conn, limit=500, active=True if active_only else None)
+    wf_list = data.get("data", []) if isinstance(data, dict) else data
+
+    if not wf_list:
+        warn("No workflows found")
+        return
+
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    click.echo(f"  Backing up {len(wf_list)} workflow(s) to {out_dir}/\n")
+    ok, fail = 0, 0
+    for w in wf_list:
+        wf_id = w.get("id", "unknown")
+        try:
+            full = workflows.get_workflow(wf_id, **conn)
+            export_data = {k: v for k, v in full.items() if k not in ("createdAt", "updatedAt", "versionId", "shared")}
+            name_safe = full.get("name", wf_id).replace(" ", "_").replace("/", "_")[:60]
+            filename = f"{wf_id}_{name_safe}.json"
+            (out_path / filename).write_text(json.dumps(export_data, indent=2, default=str))
+            click.secho(f"    {wf_id}  {full.get('name', '?')}", fg="green")
+            ok += 1
+        except Exception as exc:
+            click.secho(f"    {wf_id}  FAILED — {exc}", fg="red")
+            fail += 1
+
+    # Write manifest
+    manifest = {"backup_date": time.strftime("%Y-%m-%dT%H:%M:%S"), "count": ok, "failed": fail, "workflows": [w.get("id") for w in wf_list]}
+    (out_path / "_manifest.json").write_text(json.dumps(manifest, indent=2))
+
+    click.echo()
+    success(f"Backed up {ok} workflows to {out_dir}/ ({fail} failed)")
+
+
+@workflow_.command("restore-all")
+@click.argument("backup_dir", type=click.Path(exists=True))
+@click.option("--dry-run", is_flag=True, default=False, help="Show what would be imported without doing it")
+@click.pass_context
+def workflow_restore_all(ctx: click.Context, backup_dir: str, dry_run: bool) -> None:
+    """Restore workflows from a backup folder."""
+    conn = _conn(ctx)
+    backup_path = Path(backup_dir)
+    json_files = sorted(backup_path.glob("*.json"))
+    json_files = [f for f in json_files if f.name != "_manifest.json"]
+
+    if not json_files:
+        warn(f"No JSON files found in {backup_dir}/")
+        return
+
+    click.echo(f"  {'[DRY RUN] ' if dry_run else ''}Restoring {len(json_files)} workflow(s) from {backup_dir}/\n")
+    ok, fail = 0, 0
+    for f in json_files:
+        try:
+            data = json.loads(f.read_text())
+            name = data.get("name", f.stem)
+            if dry_run:
+                click.echo(f"    Would import: {name}")
+                ok += 1
+                continue
+            for field in ("id", "createdAt", "updatedAt", "versionId", "shared", "active"):
+                data.pop(field, None)
+            result = workflows.create_workflow(data, **conn)
+            click.secho(f"    {result.get('id', '?')}  {name}", fg="green")
+            ok += 1
+        except Exception as exc:
+            click.secho(f"    {f.name}  FAILED — {exc}", fg="red")
+            fail += 1
+
+    click.echo()
+    if dry_run:
+        success(f"Would restore {ok} workflows ({fail} would fail)")
+    else:
+        success(f"Restored {ok} workflows ({fail} failed)")
+
+
+@workflow_.command("diff")
+@click.argument("source")
+@click.argument("target")
+@click.pass_context
+def workflow_diff(ctx: click.Context, source: str, target: str) -> None:
+    """Compare two workflows. Use workflow IDs or @file.json paths.
+
+    Examples: diff ABC123 DEF456, diff ABC123 @local.json, diff @a.json @b.json
+    """
+    import difflib
+    conn = _conn(ctx)
+
+    def _load(ref: str) -> dict:
+        if ref.startswith("@"):
+            return json.loads(Path(ref[1:]).read_text())
+        return workflows.get_workflow(ref, **conn)
+
+    def _clean(data: dict) -> dict:
+        return {k: v for k, v in data.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+
+    src = _clean(_load(source))
+    tgt = _clean(_load(target))
+
+    src_lines = json.dumps(src, indent=2, sort_keys=True, default=str).splitlines(keepends=True)
+    tgt_lines = json.dumps(tgt, indent=2, sort_keys=True, default=str).splitlines(keepends=True)
+
+    src_label = source if source.startswith("@") else f"workflow:{source}"
+    tgt_label = target if target.startswith("@") else f"workflow:{target}"
+
+    diff = list(difflib.unified_diff(src_lines, tgt_lines, fromfile=src_label, tofile=tgt_label, lineterm=""))
+
+    if not diff:
+        success("Workflows are identical")
+        return
+
+    for line in diff:
+        if line.startswith("+++") or line.startswith("---"):
+            click.secho(line, fg="cyan", bold=True)
+        elif line.startswith("+"):
+            click.secho(line, fg="green")
+        elif line.startswith("-"):
+            click.secho(line, fg="red")
+        elif line.startswith("@@"):
+            click.secho(line, fg="cyan")
+        else:
+            click.echo(line)
+
+
 @workflow_.command("bulk-activate")
 @click.option("--tag", default=None, help="Activate all workflows with this tag")
 @click.option("--search", default=None, help="Activate all workflows matching name")
@@ -500,6 +630,41 @@ def execution_retry(ctx: click.Context, execution_id: str) -> None:
     """Retry a failed execution."""
     data = executions.retry_execution(execution_id, **_conn(ctx))
     output(data, _json_flag(ctx))
+
+
+@execution_.command("errors")
+@click.option("--workflow-id", default=None, help="Filter by workflow ID")
+@click.option("--limit", default=10, type=int, help="Number of errors to show")
+@click.option("--details", is_flag=True, default=False, help="Include error message details")
+@click.pass_context
+def execution_errors(ctx: click.Context, workflow_id: str | None, limit: int, details: bool) -> None:
+    """Show recent failed executions (shortcut for list --status error)."""
+    conn = _conn(ctx)
+    data = executions.list_executions(**conn, status="error", workflow_id=workflow_id, limit=limit, include_data=details)
+    err_list = data.get("data", []) if isinstance(data, dict) else data
+
+    if _json_flag(ctx):
+        output(data, True)
+        return
+
+    if not err_list:
+        success("No errors found!")
+        return
+
+    click.secho(f"\n  {len(err_list)} recent error(s):\n", fg="red", bold=True)
+    for e in err_list:
+        eid = e.get("id", "?")
+        wf_id = e.get("workflowId", "?")
+        started = str(e.get("startedAt", ""))[:19].replace("T", " ")
+        stopped = str(e.get("stoppedAt", ""))[:19].replace("T", " ")
+        click.echo(f"    {click.style(eid, fg='red'):>12s}  wf:{wf_id:<16s}  {started} -> {stopped}")
+
+        if details and isinstance(e.get("data"), dict):
+            run_data = e["data"].get("resultData", {})
+            error_msg = run_data.get("error", {}).get("message", "")
+            if error_msg:
+                click.secho(f"              {error_msg[:120]}", fg="bright_black")
+    click.echo()
 
 
 @execution_.command("watch")

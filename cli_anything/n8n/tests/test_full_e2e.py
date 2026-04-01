@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "1.3.0" in result.stdout
+        assert "1.4.0" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(
@@ -99,6 +99,34 @@ class TestCLISubprocess:
         assert result.returncode == 0
         assert "--tag" in result.stdout
         assert "--search" in result.stdout
+
+    def test_workflow_backup_all_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "backup-all", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "--dir" in result.stdout
+
+    def test_workflow_restore_all_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "restore-all", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "--dry-run" in result.stdout
+
+    def test_workflow_diff_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "diff", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "SOURCE" in result.stdout
+
+    def test_execution_errors_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "execution", "errors", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "--details" in result.stdout
 
     def test_completions_help(self):
         result = subprocess.run(

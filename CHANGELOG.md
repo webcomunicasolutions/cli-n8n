@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0] - 2026-04-01
+
+### Added
+- `workflow backup-all` — backup ALL workflows to a folder (disaster recovery)
+- `workflow restore-all` — restore workflows from a backup folder (with `--dry-run`)
+- `workflow diff` — compare two workflows or a workflow vs a local file (colored diff)
+- `execution errors` — quick view of recent failures with optional `--details`
+
 ## [1.3.0] - 2026-04-01
 
 ### Added
