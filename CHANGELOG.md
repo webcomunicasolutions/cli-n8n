@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.7] - 2026-04-02
+
+### Critical Fixes (adversarial bug bounty — round 5)
+- **Silent data corruption in autofix**: Connection key fix ("0"->"main") now MERGES instead of overwriting existing "main" connections
+- **Rollback could reactivate workflows**: `versions rollback` now strips `active` field — use `activate` command explicitly
+- **Scaffold pattern mutation**: `get_scaffold()` now returns deep copy — calling code can't corrupt templates
+- **Lying test fixed**: `test_export_import_roundtrip` now uses real `_clean_for_api()` instead of reimplementing the logic
+
 ## [2.1.6] - 2026-04-02
 
 ### Bug Fixes (review round 4)

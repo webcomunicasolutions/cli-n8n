@@ -268,8 +268,8 @@ class TestLoadJsonArg:
 
 class TestCLICommands:
     def test_export_import_roundtrip(self, tmp_path):
-        """Test that export strips server fields and import can create."""
-        from cli_anything.n8n.n8n_cli import _load_json_arg
+        """Test that export strips server fields using the REAL _clean_for_api."""
+        from cli_anything.n8n.n8n_cli import _clean_for_api, _load_json_arg
         # Simulate export data (what get_workflow returns)
         server_data = {
             "id": "abc123",
@@ -282,9 +282,10 @@ class TestCLICommands:
             "versionId": "v1",
             "shared": [{"role": "owner"}],
         }
-        # Export logic: strip server fields
-        export_data = {k: v for k, v in server_data.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+        # Use the REAL function, not a reimplementation
+        export_data = _clean_for_api(server_data)
         assert "id" not in export_data
+        assert "createdAt" not in export_data
         assert "name" in export_data
         assert "nodes" in export_data
 

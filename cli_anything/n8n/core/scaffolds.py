@@ -109,10 +109,11 @@ def list_patterns() -> list[dict[str, str]]:
 
 
 def get_scaffold(pattern: str, *, name: str | None = None) -> dict[str, Any]:
-    """Get a scaffold workflow for a pattern."""
+    """Get a scaffold workflow for a pattern. Returns a deep copy."""
+    import copy
     if pattern not in PATTERNS:
         raise ValueError(f"Unknown pattern: {pattern}. Available: {', '.join(PATTERNS.keys())}")
-    wf = PATTERNS[pattern]["workflow"].copy()
+    wf = copy.deepcopy(PATTERNS[pattern]["workflow"])
     if name:
         wf["name"] = name
     return wf

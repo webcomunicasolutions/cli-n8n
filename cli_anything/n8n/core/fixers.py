@@ -129,7 +129,11 @@ def autofix(workflow: dict[str, Any], *, apply: bool = False) -> tuple[dict[str,
             for bk in bad_keys:
                 fixes.append(Fix("connection-numeric-key", f"Connection type '{bk}' should be 'main' (from '{source_name}')", "HIGH"))
                 if apply:
-                    conns["main"] = conns.pop(bk)
+                    moved = conns.pop(bk)
+                    if "main" in conns:
+                        conns["main"].extend(moved)  # Merge, don't overwrite
+                    else:
+                        conns["main"] = moved
 
     # 6. Error output without error connections
     for node in nodes:

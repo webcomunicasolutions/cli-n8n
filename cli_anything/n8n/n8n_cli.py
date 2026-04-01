@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.6"
+VERSION = "2.1.7"
 
 
 def _safe_filename(name: str) -> str:
@@ -1402,10 +1402,11 @@ def versions_rollback(ctx: click.Context, workflow_id: str, ver_num: int | None)
     # Save current state before rollback
     _auto_snapshot(workflow_id, conn, "pre-rollback")
 
-    # Apply the rollback
+    # Apply the rollback — never re-activate, user must do it explicitly
     update_data = _clean_for_api(snapshot)
+    update_data.pop("active", None)
     workflows.update_workflow(workflow_id, update_data, **conn)
-    success(f"Rolled back workflow {workflow_id} to version {ver_num}")
+    success(f"Rolled back workflow {workflow_id} to version {ver_num} (inactive — use activate to enable)")
 
 
 @workflow_versions_.command("show")
