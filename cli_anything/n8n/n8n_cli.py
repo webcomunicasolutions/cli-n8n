@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.4"
+VERSION = "2.1.5"
 
 
 def _safe_filename(name: str) -> str:

@@ -378,6 +378,28 @@ class TestFixers:
         _, fixes = autofix(wf, apply=False)
         assert len(fixes) == 0
 
+    def test_null_nodes_no_crash(self):
+        """Bug fix: autofix must not crash when nodes or connections are None."""
+        from cli_anything.n8n.core.fixers import autofix
+        wf = {"name": "Test", "nodes": None, "connections": None}
+        _, fixes = autofix(wf, apply=False)
+        assert isinstance(fixes, list)
+
+    def test_expression_in_list_apply(self):
+        """Bug fix: _set_nested must handle bracket notation for list items."""
+        from cli_anything.n8n.core.fixers import autofix
+        wf = {
+            "name": "Test",
+            "nodes": [{"name": "Set", "type": "n8n-nodes-base.set", "parameters": {
+                "assignments": [{"name": "x", "value": "{{$json.y}}"}]
+            }}],
+            "connections": {},
+        }
+        fixed, fixes = autofix(wf, apply=True)
+        # The fix should update the value inside the list, not create a corrupted key
+        assert "assignments[0]" not in fixed["nodes"][0]["parameters"]
+        assert fixed["nodes"][0]["parameters"]["assignments"][0]["value"] == "={{$json.y}}"
+
 
 class TestNodes:
     @patch("cli_anything.n8n.core.nodes.requests.get")

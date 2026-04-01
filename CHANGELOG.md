@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.5] - 2026-04-02
+
+### Critical Bug Fixes (review round 3 — code agent)
+- **Data corruption in autofix**: `_set_nested()` now correctly handles bracket notation (`assignments[0].value`) — previously created corrupt keys like `"assignments[0]"` instead of updating list items
+- **Crash on malformed workflows**: `autofix()` no longer crashes when `nodes` or `connections` are `None` — handles gracefully
+- Hardened all node/connection iteration with type checks
+- Added regression tests for both bugs
+
 ## [2.1.4] - 2026-04-01
 
 ### Security Fixes (review round 3)
