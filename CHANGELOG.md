@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.8] - 2026-04-02
+
+### Fixes (adversarial security bounty — round 5)
+- **REPL quoted args**: REPL now uses `shlex.split()` — handles `'{"name": "my workflow"}'` correctly
+- **Error message leaking**: Server error responses no longer leak raw text (only JSON "message" field, truncated to 200 chars)
+
 ## [2.1.7] - 2026-04-02
 
 ### Critical Fixes (adversarial bug bounty — round 5)

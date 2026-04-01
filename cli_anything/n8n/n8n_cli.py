@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.7"
+VERSION = "2.1.8"
 
 
 def _safe_filename(name: str) -> str:
@@ -156,7 +156,11 @@ def repl(ctx: click.Context) -> None:
             click.echo(cli.get_help(ctx))
             continue
         try:
-            args = line.split()
+            import shlex
+            try:
+                args = shlex.split(line)
+            except ValueError:
+                args = line.split()
             cli.main(args, standalone_mode=False, obj=ctx.obj)
         except click.exceptions.UsageError as exc:
             error(str(exc))
@@ -1710,9 +1714,9 @@ def main() -> None:
         status = exc.response.status_code
         try:
             body = exc.response.json()
-            msg = body.get("message", str(body))
+            msg = str(body.get("message", "Request failed"))[:200]
         except (ValueError, AttributeError):
-            msg = exc.response.text or str(exc)
+            msg = "Request failed"
         error(f"{status} — {msg}")
         sys.exit(1)
     except requests.exceptions.ConnectionError:
