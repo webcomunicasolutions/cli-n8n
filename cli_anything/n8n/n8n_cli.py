@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.2"
+VERSION = "2.1.3"
 
 
 def _safe_filename(name: str) -> str:
@@ -519,7 +519,7 @@ def workflow_diff(ctx: click.Context, source: str, target: str) -> None:
 
     def _load(ref: str) -> dict:
         if ref.startswith("@"):
-            return json.loads(Path(ref[1:]).read_text())
+            return _load_json_arg(ref)
         return workflows.get_workflow(ref, **conn)
 
     def _clean(data: dict) -> dict:
@@ -1026,7 +1026,7 @@ def workflow_validate(ctx: click.Context, source: str) -> None:
     conn = _conn(ctx)
 
     if source.startswith("@"):
-        data = json.loads(Path(source[1:]).read_text())
+        data = _load_json_arg(source)
     else:
         data = workflows.get_workflow(source, **conn)
 
@@ -1119,7 +1119,7 @@ def workflow_autofix(ctx: click.Context, source: str, apply: bool, save_path: st
 
     conn = _conn(ctx)
     if source.startswith("@"):
-        wf_data = json.loads(Path(source[1:]).read_text())
+        wf_data = _load_json_arg(source)
         wf_id = None
     else:
         wf_data = workflows.get_workflow(source, **conn)
@@ -1509,11 +1509,12 @@ def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -
         error(f"Workflow is not active. Run: cli-anything-n8n workflow activate {workflow_id}")
         return
 
-    # Build webhook URL
+    # Build webhook URL (sanitize path to prevent traversal)
     webhook_path = webhook_node.get("parameters", {}).get("path", "")
     if not webhook_path:
         webhook_id = webhook_node.get("webhookId", "")
         webhook_path = webhook_id or workflow_id
+    webhook_path = re.sub(r'[^a-zA-Z0-9_\-/]', '', webhook_path).strip("/")
 
     base = conn["base_url"].rstrip("/")
     webhook_url = f"{base}/webhook/{webhook_path}"
@@ -1537,7 +1538,7 @@ def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -
         except (ValueError, AttributeError):
             click.echo(f"  Response: {resp.text[:200]}")
     else:
-        error(f"Webhook returned {resp.status_code}: {resp.text[:200]}")
+        error(f"Webhook returned {resp.status_code}")
 
 
 # ─── Nodes (npm registry) ───────────────────────────────────────────────────

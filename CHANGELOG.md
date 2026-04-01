@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.3] - 2026-04-01
+
+### Security Fixes (review round 2 — security agent)
+- **Path traversal**: 3 additional file reads in diff/validate/autofix now use centralized `_load_json_arg()` with `Path.resolve()`
+- **Webhook URL sanitization**: Strip special chars from webhook path to prevent URL manipulation
+- **Error message leaking**: Removed raw server response from error output
+
 ## [2.1.2] - 2026-04-01
 
 ### Fixes (from review round 2)
