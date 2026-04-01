@@ -7,6 +7,7 @@ Enables viewing history and rolling back to any previous version.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -19,6 +20,7 @@ DB_PATH = DB_DIR / "versions.db"
 
 def _connect() -> sqlite3.Connection:
     DB_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(str(DB_DIR), 0o700)
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("""

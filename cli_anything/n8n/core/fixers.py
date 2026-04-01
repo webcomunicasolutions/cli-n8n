@@ -132,6 +132,12 @@ def _iter_params(params: dict[str, Any], prefix: str = "") -> list[tuple[str, An
         full_key = f"{prefix}.{k}" if prefix else k
         if isinstance(v, dict):
             result.extend(_iter_params(v, full_key))
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                if isinstance(item, dict):
+                    result.extend(_iter_params(item, f"{full_key}[{i}]"))
+                elif isinstance(item, str):
+                    result.append((f"{full_key}[{i}]", item))
         elif isinstance(v, str):
             result.append((full_key, v))
     return result

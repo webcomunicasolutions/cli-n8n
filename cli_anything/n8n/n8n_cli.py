@@ -33,9 +33,15 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.0"
+VERSION = "2.1.1"
 
-STATUS_COLORS = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan", "new": "blue"}
+STATUS_COLORS = {
+    "success": "green", "error": "red", "running": "yellow",
+    "waiting": "cyan", "new": "blue",
+}
+
+# Fields to strip when sending workflow data to n8n API
+_INTERNAL_FIELDS = frozenset({"id", "createdAt", "updatedAt", "versionId", "shared"})
 
 
 def _conn(ctx: click.Context) -> dict[str, str]:
@@ -47,20 +53,25 @@ def _json_flag(ctx: click.Context) -> bool:
     return ctx.obj.get("as_json", False)
 
 
+def _clean_for_api(data: dict[str, Any]) -> dict[str, Any]:
+    """Remove n8n internal fields before sending to API."""
+    return {k: v for k, v in data.items() if k not in _INTERNAL_FIELDS}
+
+
 def _auto_snapshot(workflow_id: str, conn: dict[str, str], trigger: str) -> None:
     """Save a version snapshot before modifying a workflow."""
     try:
         wf_data = workflows.get_workflow(workflow_id, **conn)
         ver = versions.save_snapshot(workflow_id, wf_data, trigger)
         click.secho(f"  (snapshot v{ver} saved)", fg="bright_black")
-    except Exception:
+    except (requests.exceptions.RequestException, OSError):
         pass  # Non-critical — don't block the operation
 
 
 def _load_json_arg(value: str) -> Any:
     """Parse a JSON string or read from file if prefixed with @."""
     if value.startswith("@"):
-        filepath = value[1:]
+        filepath = Path(value[1:]).resolve()
         try:
             with open(filepath) as f:
                 return json.load(f)
@@ -381,7 +392,7 @@ def workflow_export(ctx: click.Context, workflow_id: str, out_path: str | None) 
         name = data.get("name", workflow_id).replace(" ", "_").replace("/", "_")
         out_path = f"{name}.json"
     # Remove server-specific fields for portability
-    export_data = {k: v for k, v in data.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+    export_data = _clean_for_api(data)
     Path(out_path).write_text(json.dumps(export_data, indent=2, default=str))
     success(f"Exported to {out_path}")
 
@@ -427,7 +438,7 @@ def workflow_backup_all(ctx: click.Context, out_dir: str, active_only: bool) -> 
         wf_id = w.get("id", "unknown")
         try:
             full = workflows.get_workflow(wf_id, **conn)
-            export_data = {k: v for k, v in full.items() if k not in ("createdAt", "updatedAt", "versionId", "shared")}
+            export_data = _clean_for_api(full)
             name_safe = full.get("name", wf_id).replace(" ", "_").replace("/", "_")[:60]
             filename = f"{wf_id}_{name_safe}.json"
             (out_path / filename).write_text(json.dumps(export_data, indent=2, default=str))
@@ -504,7 +515,7 @@ def workflow_diff(ctx: click.Context, source: str, target: str) -> None:
         return workflows.get_workflow(ref, **conn)
 
     def _clean(data: dict) -> dict:
-        return {k: v for k, v in data.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+        return _clean_for_api(data)
 
     src = _clean(_load(source))
     tgt = _clean(_load(target))
@@ -1127,7 +1138,7 @@ def workflow_autofix(ctx: click.Context, source: str, apply: bool, save_path: st
         success(f"Fixed workflow saved to {save_path}")
     elif apply and wf_id:
         _auto_snapshot(wf_id, conn, "autofix")
-        update_data = {k: v for k, v in fixed_wf.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+        update_data = _clean_for_api(fixed_wf)
         workflows.update_workflow(wf_id, update_data, **conn)
         success(f"Applied {len(fixes)} fix(es) to workflow {wf_id}")
     elif apply and not wf_id:
@@ -1234,7 +1245,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
         return
 
     _auto_snapshot(workflow_id, conn, "patch")
-    update_data = {k: v for k, v in wf.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+    update_data = _clean_for_api(wf)
     result = workflows.update_workflow(workflow_id, update_data, **conn)
     output(result, _json_flag(ctx))
 
@@ -1276,15 +1287,15 @@ def health_check(ctx: click.Context, diagnostic: bool) -> None:
         if resp.ok:
             health = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
             results["n8n_status"] = health.get("status", "ok")
-    except Exception:
-        pass
+    except (requests.exceptions.RequestException, ValueError):
+        pass  # healthz is optional
 
     if diagnostic:
         import os
         results["diagnostic"] = {
             "base_url": base_url,
             "api_key_set": bool(conn["api_key"]),
-            "api_key_preview": f"{conn['api_key'][:4]}...{conn['api_key'][-4:]}" if len(conn.get("api_key", "")) > 8 else "****",
+            "api_key_set": bool(conn.get("api_key")),
             "timeout": os.environ.get("N8N_TIMEOUT", "30"),
             "python": sys.version.split()[0],
             "cli_version": VERSION,
@@ -1313,7 +1324,7 @@ def health_check(ctx: click.Context, diagnostic: bool) -> None:
         diag = results["diagnostic"]
         click.echo()
         click.secho("  Diagnostic", fg="cyan", bold=True)
-        click.echo(f"  API Key:   {diag['api_key_preview']}")
+        click.echo(f"  API Key:   {'configured' if diag['api_key_set'] else 'NOT SET'}")
         click.echo(f"  Timeout:   {diag['timeout']}s")
         click.echo(f"  Python:    {diag['python']}")
         click.echo(f"  CLI:       v{diag['cli_version']}")
@@ -1372,7 +1383,7 @@ def versions_rollback(ctx: click.Context, workflow_id: str, ver_num: int | None)
     _auto_snapshot(workflow_id, conn, "pre-rollback")
 
     # Apply the rollback
-    update_data = {k: v for k, v in snapshot.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+    update_data = _clean_for_api(snapshot)
     workflows.update_workflow(workflow_id, update_data, **conn)
     success(f"Rolled back workflow {workflow_id} to version {ver_num}")
 
@@ -1394,7 +1405,8 @@ def versions_show(ctx: click.Context, workflow_id: str, version_number: int) -> 
 @click.argument("workflow_id")
 @click.argument("version_a", type=int)
 @click.argument("version_b", type=int)
-def versions_diff(workflow_id: str, version_a: int, version_b: int) -> None:
+@click.pass_context
+def versions_diff(ctx: click.Context, workflow_id: str, version_a: int, version_b: int) -> None:
     """Compare two versions of a workflow."""
     import difflib
     snap_a = versions.get_snapshot(workflow_id, version_a)

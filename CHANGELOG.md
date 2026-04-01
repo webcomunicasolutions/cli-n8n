@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.1.1] - 2026-04-01
+
+### Security Fixes (from 3-agent code review)
+- **Path traversal prevention**: `_load_json_arg()` now resolves paths before opening
+- **API key no longer exposed**: `health --diagnostic` shows only "configured/NOT SET"
+- **File permissions**: config.json (0600) and versions.db directory (0700) are now restricted
+- **Specific exceptions**: Replaced bare `except Exception: pass` with targeted exception types
+
+### Code Quality Fixes
+- Extracted `_clean_for_api()` helper — eliminated 7 duplicated filter expressions
+- Added `_INTERNAL_FIELDS` constant for workflow metadata fields
+- Fixed `versions_diff` missing `@click.pass_context` decorator
+- Fixed `_iter_params` to detect expressions inside lists (not just dicts)
+- Reviewed by: code-reviewer, security-reviewer, python-reviewer agents
+
 ## [2.1.0] - 2026-04-01
 
 ### Added
