@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.0] - 2026-04-01
+
+### Added
+- `workflow scaffold <pattern>` — generate workflows from 5 proven patterns (webhook, api, database, ai-agent, scheduled)
+- `workflow patterns` — list available scaffold patterns
+- `expression <expr>` — validate n8n expression syntax offline
+- New modules: `core/scaffolds.py`, `core/expressions.py`
+
+### Changed
+- Version bump to 2.0.0 — the CLI is now feature-complete for the n8n Public API
+- 10 core modules, 60+ commands, 80+ tests
+
 ## [1.7.0] - 2026-04-01
 
 ### Added

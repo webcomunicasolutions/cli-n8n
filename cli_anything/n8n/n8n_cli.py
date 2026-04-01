@@ -19,7 +19,9 @@ import requests
 from cli_anything.n8n.core import (
     credentials,
     executions,
+    expressions,
     project,
+    scaffolds,
     tags,
     templates,
     variables,
@@ -30,7 +32,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "1.7.0"
+VERSION = "2.0.0"
 
 STATUS_COLORS = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan", "new": "blue"}
 
@@ -1510,6 +1512,89 @@ def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -
             click.echo(f"  Response: {resp.text[:200]}")
     else:
         error(f"Webhook returned {resp.status_code}: {resp.text[:200]}")
+
+
+# ─── Scaffold ───────────────────────────────────────────────────────────────
+
+@workflow_.command("scaffold")
+@click.argument("pattern", type=click.Choice(["webhook", "api", "database", "ai-agent", "scheduled"]))
+@click.option("--name", default=None, help="Custom workflow name")
+@click.option("--deploy", is_flag=True, default=False, help="Deploy directly to n8n")
+@click.option("-o", "--output", "out_path", default=None, help="Save to file")
+@click.pass_context
+def workflow_scaffold(ctx: click.Context, pattern: str, name: str | None, deploy: bool, out_path: str | None) -> None:
+    """Generate a workflow from a proven pattern.
+
+    Patterns: webhook, api, database, ai-agent, scheduled.
+    """
+    wf = scaffolds.get_scaffold(pattern, name=name)
+
+    if _json_flag(ctx) and not deploy and not out_path:
+        output(wf, True)
+        return
+
+    if deploy:
+        result = workflows.create_workflow(wf, **_conn(ctx))
+        success(f"Deployed '{wf['name']}' as workflow {result.get('id', '?')}")
+        output(result, _json_flag(ctx))
+    elif out_path:
+        Path(out_path).write_text(json.dumps(wf, indent=2, default=str))
+        success(f"Saved scaffold to {out_path}")
+    else:
+        click.secho(f"\n  Pattern: {pattern}", fg="cyan", bold=True)
+        click.echo(f"  Name: {wf['name']}")
+        click.echo(f"  Nodes: {len(wf['nodes'])}")
+        for n in wf["nodes"]:
+            click.echo(f"    - {n['name']} ({n['type']})")
+        click.echo(f"\n  Use --deploy to create in n8n, --output to save to file, or --json to see full JSON")
+        click.echo()
+
+
+@workflow_.command("patterns")
+@click.pass_context
+def workflow_patterns(ctx: click.Context) -> None:
+    """List available scaffold patterns."""
+    patterns = scaffolds.list_patterns()
+    if _json_flag(ctx):
+        output(patterns, True)
+        return
+    click.secho("\n  Available workflow patterns:\n", fg="cyan", bold=True)
+    for p in patterns:
+        click.echo(f"    {click.style(p['name'], fg='cyan'):>20s}  {p['description']}")
+    click.echo(f"\n  Usage: cli-anything-n8n workflow scaffold <pattern> [--deploy]")
+    click.echo()
+
+
+# ─── Expression Validator ───────────────────────────────────────────────────
+
+@cli.command("expression")
+@click.argument("expr")
+@click.pass_context
+def expression_validate(ctx: click.Context, expr: str) -> None:
+    """Validate an n8n expression (e.g., '={{$json.name}}')."""
+    result = expressions.validate_expression(expr)
+
+    if _json_flag(ctx):
+        output({"valid": result.valid, "expression": result.expression, "issues": result.issues, "warnings": result.warnings}, True)
+        return
+
+    if result.valid and not result.warnings:
+        success(f"Expression is valid: {expr}")
+        return
+
+    if result.issues:
+        click.secho(f"\n  INVALID expression:\n", fg="red", bold=True)
+        for issue in result.issues:
+            click.secho(f"    {issue}", fg="red")
+
+    if result.warnings:
+        click.secho(f"\n  Warnings:", fg="yellow")
+        for w in result.warnings:
+            click.secho(f"    {w}", fg="yellow")
+
+    if result.valid:
+        success("Expression is syntactically valid (with warnings)")
+    click.echo()
 
 
 # ─── Entry point ────────────────────────────────────────────────────────────

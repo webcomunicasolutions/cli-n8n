@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "1.7.0" in result.stdout
+        assert "2.0.0" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(
@@ -188,6 +188,35 @@ class TestCLISubprocess:
         assert "rollback" in result.stdout
         assert "prune" in result.stdout
         assert "stats" in result.stdout
+
+    def test_workflow_scaffold_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "scaffold", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "webhook" in result.stdout
+        assert "ai-agent" in result.stdout
+
+    def test_workflow_patterns(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "patterns"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "webhook" in result.stdout
+        assert "database" in result.stdout
+
+    def test_expression_validate_valid(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "expression", "={{$json.name}}"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "valid" in result.stdout.lower()
+
+    def test_expression_validate_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "expression", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
 
     def test_completions_help(self):
         result = subprocess.run(

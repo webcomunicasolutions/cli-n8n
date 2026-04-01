@@ -379,6 +379,58 @@ class TestFixers:
         assert len(fixes) == 0
 
 
+class TestScaffolds:
+    def test_list_patterns(self):
+        from cli_anything.n8n.core.scaffolds import list_patterns
+        patterns = list_patterns()
+        assert len(patterns) == 5
+        names = {p["name"] for p in patterns}
+        assert "webhook" in names
+        assert "ai-agent" in names
+
+    def test_get_scaffold(self):
+        from cli_anything.n8n.core.scaffolds import get_scaffold
+        wf = get_scaffold("webhook")
+        assert wf["name"] == "Webhook Processing"
+        assert len(wf["nodes"]) > 0
+        assert "connections" in wf
+
+    def test_get_scaffold_custom_name(self):
+        from cli_anything.n8n.core.scaffolds import get_scaffold
+        wf = get_scaffold("api", name="My API Flow")
+        assert wf["name"] == "My API Flow"
+
+    def test_get_scaffold_invalid(self):
+        from cli_anything.n8n.core.scaffolds import get_scaffold
+        with pytest.raises(ValueError, match="Unknown pattern"):
+            get_scaffold("nonexistent")
+
+
+class TestExpressions:
+    def test_valid_expression(self):
+        from cli_anything.n8n.core.expressions import validate_expression
+        result = validate_expression("={{$json.name}}")
+        assert result.valid
+        assert len(result.issues) == 0
+
+    def test_mismatched_braces(self):
+        from cli_anything.n8n.core.expressions import validate_expression
+        result = validate_expression("={{$json.name}")
+        assert not result.valid
+        assert any("Mismatched" in i for i in result.issues)
+
+    def test_missing_equals_prefix(self):
+        from cli_anything.n8n.core.expressions import validate_expression
+        result = validate_expression("{{$json.name}}")
+        assert result.valid  # valid but with warning
+        assert any("prefix" in w for w in result.warnings)
+
+    def test_json_bracket_without_quotes(self):
+        from cli_anything.n8n.core.expressions import validate_expression
+        result = validate_expression("={{$json[key]}}")
+        assert any("quotes" in i for i in result.issues)
+
+
 class TestTemplates:
     @patch("cli_anything.n8n.core.templates.requests.get")
     def test_search_templates(self, mock_get):
