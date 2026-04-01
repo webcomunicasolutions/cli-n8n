@@ -296,6 +296,38 @@ class TestCLICommands:
         assert "id" not in loaded
 
 
+class TestFixers:
+    def test_expression_format(self):
+        from cli_anything.n8n.core.fixers import autofix
+        wf = {"name": "Test", "nodes": [{"name": "Node1", "type": "n8n-nodes-base.set", "parameters": {"value": "{{$json.name}}"}}], "connections": {}}
+        _, fixes = autofix(wf, apply=False)
+        assert any(f.fix_type == "expression-format" for f in fixes)
+
+    def test_expression_format_apply(self):
+        from cli_anything.n8n.core.fixers import autofix
+        wf = {"name": "Test", "nodes": [{"name": "Node1", "type": "n8n-nodes-base.set", "parameters": {"value": "{{$json.name}}"}}], "connections": {}}
+        fixed, fixes = autofix(wf, apply=True)
+        assert fixed["nodes"][0]["parameters"]["value"] == "={{$json.name}}"
+
+    def test_webhook_missing_path(self):
+        from cli_anything.n8n.core.fixers import autofix
+        wf = {"name": "Test", "nodes": [{"name": "Webhook", "type": "n8n-nodes-base.webhook", "parameters": {}}], "connections": {}}
+        _, fixes = autofix(wf, apply=False)
+        assert any(f.fix_type == "webhook-missing-path" for f in fixes)
+
+    def test_orphan_connection(self):
+        from cli_anything.n8n.core.fixers import autofix
+        wf = {"name": "Test", "nodes": [{"name": "A", "type": "test"}], "connections": {"NonExistent": {"main": [[{"node": "A", "type": "main", "index": 0}]]}}}
+        fixed, fixes = autofix(wf, apply=True)
+        assert "NonExistent" not in fixed["connections"]
+
+    def test_no_issues(self):
+        from cli_anything.n8n.core.fixers import autofix
+        wf = {"name": "Test", "nodes": [{"name": "A", "type": "n8n-nodes-base.manualTrigger", "parameters": {}}], "connections": {}}
+        _, fixes = autofix(wf, apply=False)
+        assert len(fixes) == 0
+
+
 class TestTemplates:
     @patch("cli_anything.n8n.core.templates.requests.get")
     def test_search_templates(self, mock_get):

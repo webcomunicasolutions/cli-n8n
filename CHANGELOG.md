@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0] - 2026-04-01
+
+### Added
+- `workflow autofix` — detect and repair 6 types of common issues (expression format, webhook paths, broken connections, duplicate names, numeric connection keys, unused error outputs). Preview mode by default.
+- `workflow patch` — incremental updates: `--rename`, `--enable-node`, `--disable-node`, `--remove-node`, `--connect`, `--disconnect`. No need to send the full workflow JSON.
+- `health` — full health check with response time, connectivity test, and `--diagnostic` mode
+- New module `core/fixers.py` with pluggable fix engine
+
+### Inspired by
+- `WorkflowAutoFixer` and `WorkflowDiffEngine` from [n8n-mcp](https://github.com/czlonkowski/n8n-mcp)
+
 ## [1.5.0] - 2026-04-01
 
 ### Added

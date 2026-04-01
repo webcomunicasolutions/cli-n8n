@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "1.5.0" in result.stdout
+        assert "1.6.0" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(
@@ -155,6 +155,30 @@ class TestCLISubprocess:
         )
         assert result.returncode == 0
         assert "WORKFLOW_ID" in result.stdout
+
+    def test_workflow_autofix_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "autofix", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "--apply" in result.stdout
+
+    def test_workflow_patch_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "patch", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "--rename" in result.stdout
+        assert "--enable-node" in result.stdout
+        assert "--remove-node" in result.stdout
+        assert "--connect" in result.stdout
+
+    def test_health_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "health", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "--diagnostic" in result.stdout
 
     def test_completions_help(self):
         result = subprocess.run(

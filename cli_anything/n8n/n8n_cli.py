@@ -29,7 +29,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 STATUS_COLORS = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan", "new": "blue"}
 
@@ -1062,6 +1062,245 @@ def workflow_validate(ctx: click.Context, source: str) -> None:
 
     if not issues and not warnings:
         click.echo(f"  {len(nodes)} nodes, {trigger_count} trigger(s)")
+    click.echo()
+
+
+# ─── Workflow Autofix ───────────────────────────────────────────────────────
+
+@workflow_.command("autofix")
+@click.argument("source")
+@click.option("--apply", is_flag=True, default=False, help="Apply fixes (default: preview only)")
+@click.option("--save", "save_path", default=None, help="Save fixed workflow to file instead of updating n8n")
+@click.pass_context
+def workflow_autofix(ctx: click.Context, source: str, apply: bool, save_path: str | None) -> None:
+    """Auto-fix common workflow issues. Preview by default, --apply to save.
+
+    Fixes: expression format, webhook paths, broken connections, duplicate names,
+    connection types, unused error outputs.
+    """
+    from cli_anything.n8n.core.fixers import autofix
+
+    conn = _conn(ctx)
+    if source.startswith("@"):
+        wf_data = json.loads(Path(source[1:]).read_text())
+        wf_id = None
+    else:
+        wf_data = workflows.get_workflow(source, **conn)
+        wf_id = source
+
+    import copy
+    wf_copy = copy.deepcopy(wf_data)
+    fixed_wf, fixes = autofix(wf_copy, apply=True)
+
+    if _json_flag(ctx):
+        output({"fixes": [{"type": f.fix_type, "description": f.description, "confidence": f.confidence, "node": f.node_name} for f in fixes], "total": len(fixes), "applied": apply or bool(save_path)}, True)
+        return
+
+    if not fixes:
+        success("No issues found!")
+        return
+
+    click.secho(f"\n  Found {len(fixes)} issue(s):\n", fg="yellow", bold=True)
+    for f in fixes:
+        color = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "bright_black"}.get(f.confidence, "white")
+        node_str = f" [{f.node_name}]" if f.node_name else ""
+        click.echo(f"    {click.style(f.confidence, fg=color):>8s}  {f.fix_type:30s}{node_str}")
+        click.secho(f"             {f.description}", fg="bright_black")
+
+    if save_path:
+        Path(save_path).write_text(json.dumps(fixed_wf, indent=2, default=str))
+        success(f"Fixed workflow saved to {save_path}")
+    elif apply and wf_id:
+        update_data = {k: v for k, v in fixed_wf.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+        workflows.update_workflow(wf_id, update_data, **conn)
+        success(f"Applied {len(fixes)} fix(es) to workflow {wf_id}")
+    elif apply and not wf_id:
+        error("Cannot apply fixes to a file source. Use --save instead.")
+    else:
+        warn("Preview only. Use --apply to fix in n8n, or --save to save to file.")
+    click.echo()
+
+
+# ─── Workflow Patch (incremental updates) ───────────────────────────────────
+
+@workflow_.command("patch")
+@click.argument("workflow_id")
+@click.option("--rename", default=None, help="Rename the workflow")
+@click.option("--enable-node", default=None, help="Enable a disabled node by name")
+@click.option("--disable-node", default=None, help="Disable a node by name")
+@click.option("--remove-node", default=None, help="Remove a node by name (and its connections)")
+@click.option("--connect", nargs=2, default=None, help="Connect two nodes: --connect SOURCE TARGET")
+@click.option("--disconnect", nargs=2, default=None, help="Disconnect two nodes: --disconnect SOURCE TARGET")
+@click.pass_context
+def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, enable_node: str | None, disable_node: str | None, remove_node: str | None, connect: tuple[str, str] | None, disconnect: tuple[str, str] | None) -> None:
+    """Apply incremental changes to a workflow without replacing it entirely."""
+    conn = _conn(ctx)
+    wf = workflows.get_workflow(workflow_id, **conn)
+    nodes = wf.get("nodes", [])
+    connections = wf.get("connections", {})
+    changed = False
+
+    if rename:
+        wf["name"] = rename
+        changed = True
+        success(f"Renamed to '{rename}'")
+
+    if enable_node:
+        for n in nodes:
+            if n.get("name") == enable_node:
+                n["disabled"] = False
+                changed = True
+                success(f"Enabled node '{enable_node}'")
+                break
+        else:
+            error(f"Node '{enable_node}' not found")
+            return
+
+    if disable_node:
+        for n in nodes:
+            if n.get("name") == disable_node:
+                n["disabled"] = True
+                changed = True
+                success(f"Disabled node '{disable_node}'")
+                break
+        else:
+            error(f"Node '{disable_node}' not found")
+            return
+
+    if remove_node:
+        original_len = len(nodes)
+        wf["nodes"] = [n for n in nodes if n.get("name") != remove_node]
+        if len(wf["nodes"]) == original_len:
+            error(f"Node '{remove_node}' not found")
+            return
+        # Clean connections
+        connections.pop(remove_node, None)
+        for src_conns in connections.values():
+            if isinstance(src_conns, dict):
+                for outputs in src_conns.values():
+                    if isinstance(outputs, list):
+                        for output_list in outputs:
+                            if isinstance(output_list, list):
+                                output_list[:] = [t for t in output_list if t.get("node") != remove_node]
+        changed = True
+        success(f"Removed node '{remove_node}' and its connections")
+
+    if connect:
+        src, tgt = connect
+        node_names = {n.get("name") for n in wf["nodes"]}
+        if src not in node_names:
+            error(f"Source node '{src}' not found")
+            return
+        if tgt not in node_names:
+            error(f"Target node '{tgt}' not found")
+            return
+        connections.setdefault(src, {}).setdefault("main", [[]])
+        connections[src]["main"][0].append({"node": tgt, "type": "main", "index": 0})
+        changed = True
+        success(f"Connected '{src}' -> '{tgt}'")
+
+    if disconnect:
+        src, tgt = disconnect
+        if src in connections and isinstance(connections[src], dict):
+            for outputs in connections[src].values():
+                if isinstance(outputs, list):
+                    for output_list in outputs:
+                        if isinstance(output_list, list):
+                            output_list[:] = [t for t in output_list if t.get("node") != tgt]
+            changed = True
+            success(f"Disconnected '{src}' -> '{tgt}'")
+        else:
+            error(f"No connections from '{src}'")
+            return
+
+    if not changed:
+        error("No operations specified. Use --rename, --enable-node, --disable-node, --remove-node, --connect, or --disconnect")
+        return
+
+    update_data = {k: v for k, v in wf.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+    result = workflows.update_workflow(workflow_id, update_data, **conn)
+    output(result, _json_flag(ctx))
+
+
+# ─── Health Check ───────────────────────────────────────────────────────────
+
+@cli.command("health")
+@click.option("--diagnostic", is_flag=True, default=False, help="Show detailed diagnostic info")
+@click.pass_context
+def health_check(ctx: click.Context, diagnostic: bool) -> None:
+    """Check n8n instance health and connectivity."""
+    conn = _conn(ctx)
+    base_url = conn["base_url"]
+
+    if not base_url:
+        error("No URL configured.")
+        return
+
+    results: dict[str, Any] = {"url": base_url, "status": "unknown"}
+
+    # Test connectivity and measure response time
+    start = time.time()
+    try:
+        wf_data = workflows.list_workflows(**conn, limit=1)
+        elapsed = round((time.time() - start) * 1000)
+        results["status"] = "connected"
+        results["response_ms"] = elapsed
+
+        wf_list = wf_data.get("data", []) if isinstance(wf_data, dict) else wf_data
+        results["has_workflows"] = len(wf_list) > 0
+    except requests.exceptions.ConnectionError:
+        results["status"] = "unreachable"
+    except requests.exceptions.HTTPError as exc:
+        results["status"] = f"error_{exc.response.status_code}"
+
+    # Try to get n8n version via healthz endpoint
+    try:
+        resp = requests.get(f"{base_url}/healthz", timeout=5)
+        if resp.ok:
+            health = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            results["n8n_status"] = health.get("status", "ok")
+    except Exception:
+        pass
+
+    if diagnostic:
+        import os
+        results["diagnostic"] = {
+            "base_url": base_url,
+            "api_key_set": bool(conn["api_key"]),
+            "api_key_preview": f"{conn['api_key'][:4]}...{conn['api_key'][-4:]}" if len(conn.get("api_key", "")) > 8 else "****",
+            "timeout": os.environ.get("N8N_TIMEOUT", "30"),
+            "python": sys.version.split()[0],
+            "cli_version": VERSION,
+        }
+
+    if _json_flag(ctx):
+        output(results, True)
+        return
+
+    click.echo()
+    click.secho("  n8n Health Check", fg="cyan", bold=True)
+    click.secho("  " + "=" * 40, fg="cyan")
+    click.echo()
+
+    click.echo(f"  Instance:  {base_url}")
+
+    if results["status"] == "connected":
+        click.secho(f"  Status:    Connected", fg="green")
+        click.echo(f"  Response:  {results.get('response_ms', '?')}ms")
+    elif results["status"] == "unreachable":
+        click.secho(f"  Status:    Unreachable", fg="red")
+    else:
+        click.secho(f"  Status:    {results['status']}", fg="red")
+
+    if diagnostic and "diagnostic" in results:
+        diag = results["diagnostic"]
+        click.echo()
+        click.secho("  Diagnostic", fg="cyan", bold=True)
+        click.echo(f"  API Key:   {diag['api_key_preview']}")
+        click.echo(f"  Timeout:   {diag['timeout']}s")
+        click.echo(f"  Python:    {diag['python']}")
+        click.echo(f"  CLI:       v{diag['cli_version']}")
+
     click.echo()
 
 
