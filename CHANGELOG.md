@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.7.0] - 2026-04-01
+
+### Added
+- `workflow versions list/show/rollback/diff/prune/stats` — full version tracking with local SQLite
+- Auto-snapshot before every write operation (update, patch, autofix --apply)
+- Rollback to any previous version with automatic pre-rollback backup
+- Version diff between any two stored snapshots
+- Storage stats and pruning for disk management
+
 ## [1.6.0] - 2026-04-01
 
 ### Added

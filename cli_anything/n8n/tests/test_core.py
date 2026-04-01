@@ -296,6 +296,57 @@ class TestCLICommands:
         assert "id" not in loaded
 
 
+class TestVersions:
+    def test_save_and_list(self, tmp_path, monkeypatch):
+        from cli_anything.n8n.core import versions as ver
+        monkeypatch.setattr(ver, "DB_DIR", tmp_path)
+        monkeypatch.setattr(ver, "DB_PATH", tmp_path / "versions.db")
+
+        wf = {"name": "Test WF", "nodes": [], "connections": {}}
+        v1 = ver.save_snapshot("wf1", wf, "update")
+        assert v1 == 1
+        v2 = ver.save_snapshot("wf1", {**wf, "name": "Updated"}, "patch")
+        assert v2 == 2
+
+        vers = ver.list_versions("wf1")
+        assert len(vers) == 2
+        assert vers[0]["version_number"] == 2
+
+    def test_get_snapshot(self, tmp_path, monkeypatch):
+        from cli_anything.n8n.core import versions as ver
+        monkeypatch.setattr(ver, "DB_DIR", tmp_path)
+        monkeypatch.setattr(ver, "DB_PATH", tmp_path / "versions.db")
+
+        wf = {"name": "Original", "nodes": [{"name": "A"}]}
+        ver.save_snapshot("wf1", wf, "update")
+        snapshot = ver.get_snapshot("wf1", 1)
+        assert snapshot["name"] == "Original"
+        assert snapshot["nodes"][0]["name"] == "A"
+
+    def test_prune(self, tmp_path, monkeypatch):
+        from cli_anything.n8n.core import versions as ver
+        monkeypatch.setattr(ver, "DB_DIR", tmp_path)
+        monkeypatch.setattr(ver, "DB_PATH", tmp_path / "versions.db")
+
+        for i in range(5):
+            ver.save_snapshot("wf1", {"name": f"v{i}"}, "test")
+        deleted = ver.prune_versions("wf1", keep=2)
+        assert deleted == 3
+        remaining = ver.list_versions("wf1")
+        assert len(remaining) == 2
+
+    def test_stats(self, tmp_path, monkeypatch):
+        from cli_anything.n8n.core import versions as ver
+        monkeypatch.setattr(ver, "DB_DIR", tmp_path)
+        monkeypatch.setattr(ver, "DB_PATH", tmp_path / "versions.db")
+
+        ver.save_snapshot("wf1", {"name": "A"}, "test")
+        ver.save_snapshot("wf2", {"name": "B"}, "test")
+        st = ver.stats()
+        assert st["total_versions"] == 2
+        assert st["workflows_tracked"] == 2
+
+
 class TestFixers:
     def test_expression_format(self):
         from cli_anything.n8n.core.fixers import autofix

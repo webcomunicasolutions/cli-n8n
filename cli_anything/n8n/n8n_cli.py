@@ -23,13 +23,14 @@ from cli_anything.n8n.core import (
     tags,
     templates,
     variables,
+    versions,
     workflows,
 )
 from cli_anything.n8n.utils.repl_skin import error, output, print_banner, success, warn
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 
 STATUS_COLORS = {"success": "green", "error": "red", "running": "yellow", "waiting": "cyan", "new": "blue"}
 
@@ -41,6 +42,16 @@ def _conn(ctx: click.Context) -> dict[str, str]:
 
 def _json_flag(ctx: click.Context) -> bool:
     return ctx.obj.get("as_json", False)
+
+
+def _auto_snapshot(workflow_id: str, conn: dict[str, str], trigger: str) -> None:
+    """Save a version snapshot before modifying a workflow."""
+    try:
+        wf_data = workflows.get_workflow(workflow_id, **conn)
+        ver = versions.save_snapshot(workflow_id, wf_data, trigger)
+        click.secho(f"  (snapshot v{ver} saved)", fg="bright_black")
+    except Exception:
+        pass  # Non-critical — don't block the operation
 
 
 def _load_json_arg(value: str) -> Any:
@@ -294,6 +305,7 @@ def workflow_create(ctx: click.Context, json_data: str) -> None:
 @click.pass_context
 def workflow_update(ctx: click.Context, workflow_id: str, json_data: str) -> None:
     """Update a workflow."""
+    _auto_snapshot(workflow_id, _conn(ctx), "update")
     data = workflows.update_workflow(workflow_id, _load_json_arg(json_data), **_conn(ctx))
     output(data, _json_flag(ctx))
 
@@ -1111,6 +1123,7 @@ def workflow_autofix(ctx: click.Context, source: str, apply: bool, save_path: st
         Path(save_path).write_text(json.dumps(fixed_wf, indent=2, default=str))
         success(f"Fixed workflow saved to {save_path}")
     elif apply and wf_id:
+        _auto_snapshot(wf_id, conn, "autofix")
         update_data = {k: v for k, v in fixed_wf.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
         workflows.update_workflow(wf_id, update_data, **conn)
         success(f"Applied {len(fixes)} fix(es) to workflow {wf_id}")
@@ -1217,6 +1230,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
         error("No operations specified. Use --rename, --enable-node, --disable-node, --remove-node, --connect, or --disconnect")
         return
 
+    _auto_snapshot(workflow_id, conn, "patch")
     update_data = {k: v for k, v in wf.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
     result = workflows.update_workflow(workflow_id, update_data, **conn)
     output(result, _json_flag(ctx))
@@ -1301,6 +1315,142 @@ def health_check(ctx: click.Context, diagnostic: bool) -> None:
         click.echo(f"  Python:    {diag['python']}")
         click.echo(f"  CLI:       v{diag['cli_version']}")
 
+    click.echo()
+
+
+# ─── Workflow Versions ──────────────────────────────────────────────────────
+
+@workflow_.group("versions")
+def workflow_versions_() -> None:
+    """Version history and rollback (local snapshots)."""
+
+
+@workflow_versions_.command("list")
+@click.argument("workflow_id")
+@click.option("--limit", default=20, type=int)
+@click.pass_context
+def versions_list(ctx: click.Context, workflow_id: str, limit: int) -> None:
+    """List stored versions for a workflow."""
+    vers = versions.list_versions(workflow_id, limit=limit)
+    if _json_flag(ctx):
+        output(vers, True)
+        return
+    if not vers:
+        warn(f"No versions stored for workflow {workflow_id}")
+        click.echo("  Versions are saved automatically when you use: update, patch, autofix --apply")
+        return
+    click.secho(f"\n  {len(vers)} version(s) for workflow {workflow_id}:\n", fg="cyan")
+    for v in vers:
+        click.echo(f"    v{v['version_number']:>3d}  {v['created_at']}  {click.style(v['trigger'], fg='cyan'):>12s}  {v['workflow_name']}")
+    click.echo()
+
+
+@workflow_versions_.command("rollback")
+@click.argument("workflow_id")
+@click.option("--version", "ver_num", type=int, default=None, help="Version number to rollback to (default: previous)")
+@click.pass_context
+def versions_rollback(ctx: click.Context, workflow_id: str, ver_num: int | None) -> None:
+    """Rollback a workflow to a previous version."""
+    conn = _conn(ctx)
+
+    if ver_num is None:
+        vers = versions.list_versions(workflow_id, limit=1)
+        if not vers:
+            error(f"No versions found for workflow {workflow_id}")
+            return
+        ver_num = vers[0]["version_number"]
+
+    snapshot = versions.get_snapshot(workflow_id, ver_num)
+    if not snapshot:
+        error(f"Version {ver_num} not found for workflow {workflow_id}")
+        return
+
+    # Save current state before rollback
+    _auto_snapshot(workflow_id, conn, "pre-rollback")
+
+    # Apply the rollback
+    update_data = {k: v for k, v in snapshot.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+    workflows.update_workflow(workflow_id, update_data, **conn)
+    success(f"Rolled back workflow {workflow_id} to version {ver_num}")
+
+
+@workflow_versions_.command("show")
+@click.argument("workflow_id")
+@click.argument("version_number", type=int)
+@click.pass_context
+def versions_show(ctx: click.Context, workflow_id: str, version_number: int) -> None:
+    """Show a specific version's snapshot."""
+    snapshot = versions.get_snapshot(workflow_id, version_number)
+    if not snapshot:
+        error(f"Version {version_number} not found")
+        return
+    output(snapshot, _json_flag(ctx))
+
+
+@workflow_versions_.command("diff")
+@click.argument("workflow_id")
+@click.argument("version_a", type=int)
+@click.argument("version_b", type=int)
+def versions_diff(workflow_id: str, version_a: int, version_b: int) -> None:
+    """Compare two versions of a workflow."""
+    import difflib
+    snap_a = versions.get_snapshot(workflow_id, version_a)
+    snap_b = versions.get_snapshot(workflow_id, version_b)
+    if not snap_a:
+        error(f"Version {version_a} not found")
+        return
+    if not snap_b:
+        error(f"Version {version_b} not found")
+        return
+
+    def _clean(d: dict) -> str:
+        clean = {k: v for k, v in d.items() if k not in ("id", "createdAt", "updatedAt", "versionId", "shared")}
+        return json.dumps(clean, indent=2, sort_keys=True, default=str)
+
+    lines_a = _clean(snap_a).splitlines(keepends=True)
+    lines_b = _clean(snap_b).splitlines(keepends=True)
+    diff = difflib.unified_diff(lines_a, lines_b, fromfile=f"v{version_a}", tofile=f"v{version_b}", lineterm="")
+
+    any_diff = False
+    for line in diff:
+        any_diff = True
+        if line.startswith("+++") or line.startswith("---"):
+            click.secho(line, fg="cyan", bold=True)
+        elif line.startswith("+"):
+            click.secho(line, fg="green")
+        elif line.startswith("-"):
+            click.secho(line, fg="red")
+        elif line.startswith("@@"):
+            click.secho(line, fg="cyan")
+        else:
+            click.echo(line)
+
+    if not any_diff:
+        success("Versions are identical")
+
+
+@workflow_versions_.command("prune")
+@click.argument("workflow_id")
+@click.option("--keep", default=10, type=int, help="Number of recent versions to keep")
+def versions_prune(workflow_id: str, keep: int) -> None:
+    """Delete old versions, keeping the N most recent."""
+    deleted = versions.prune_versions(workflow_id, keep=keep)
+    success(f"Pruned {deleted} old version(s), kept {keep} most recent")
+
+
+@workflow_versions_.command("stats")
+@click.pass_context
+def versions_stats(ctx: click.Context) -> None:
+    """Show version storage statistics."""
+    st = versions.stats()
+    if _json_flag(ctx):
+        output(st, True)
+        return
+    click.echo(f"\n  Versions DB: {st['db_path']}")
+    click.echo(f"  Workflows tracked: {st['workflows_tracked']}")
+    click.echo(f"  Total versions: {st['total_versions']}")
+    size_kb = st['db_size_bytes'] / 1024
+    click.echo(f"  DB size: {size_kb:.1f} KB")
     click.echo()
 
 

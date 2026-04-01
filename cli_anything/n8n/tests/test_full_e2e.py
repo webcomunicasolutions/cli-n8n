@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "1.6.0" in result.stdout
+        assert "1.7.0" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(
@@ -179,6 +179,15 @@ class TestCLISubprocess:
         )
         assert result.returncode == 0
         assert "--diagnostic" in result.stdout
+
+    def test_workflow_versions_help(self):
+        result = subprocess.run(
+            [*_resolve_cli(), "workflow", "versions", "--help"], capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert "rollback" in result.stdout
+        assert "prune" in result.stdout
+        assert "stats" in result.stdout
 
     def test_completions_help(self):
         result = subprocess.run(
