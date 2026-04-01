@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.6] - 2026-04-02
+
+### Bug Fixes (review round 4)
+- **IndexError in `patch --connect`**: Fixed crash when node's "main" connection list exists but is empty
+- **AttributeError in `patch --remove-node/--disconnect`**: Connection list items can be None/malformed — now filtered safely
+- **JSONDecodeError in config load**: Corrupted `config.json` no longer crashes the entire CLI — falls back to defaults
+
 ## [2.1.5] - 2026-04-02
 
 ### Critical Bug Fixes (review round 3 — code agent)

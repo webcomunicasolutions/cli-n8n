@@ -21,8 +21,11 @@ def load_config() -> dict[str, Any]:
     """Load config from file, overlaid with env vars."""
     cfg = dict(DEFAULTS)
     if CONFIG_FILE.exists():
-        with open(CONFIG_FILE) as f:
-            cfg.update(json.load(f))
+        try:
+            with open(CONFIG_FILE) as f:
+                cfg.update(json.load(f))
+        except (json.JSONDecodeError, ValueError):
+            pass  # Corrupted config — fall back to defaults + env vars
     if url := os.environ.get("N8N_BASE_URL"):
         cfg["base_url"] = url
     if key := os.environ.get("N8N_API_KEY"):

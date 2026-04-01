@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.5"
+VERSION = "2.1.6"
 
 
 def _safe_filename(name: str) -> str:
@@ -1226,7 +1226,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
                     if isinstance(outputs, list):
                         for output_list in outputs:
                             if isinstance(output_list, list):
-                                output_list[:] = [t for t in output_list if t.get("node") != remove_node]
+                                output_list[:] = [t for t in output_list if isinstance(t, dict) and t.get("node") != remove_node]
         changed = True
         success(f"Removed node '{remove_node}' and its connections")
 
@@ -1239,8 +1239,11 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
         if tgt not in node_names:
             error(f"Target node '{tgt}' not found")
             return
-        connections.setdefault(src, {}).setdefault("main", [[]])
-        connections[src]["main"][0].append({"node": tgt, "type": "main", "index": 0})
+        src_conns = connections.setdefault(src, {})
+        main_outputs = src_conns.setdefault("main", [[]])
+        if not main_outputs or not isinstance(main_outputs[0], list):
+            main_outputs.insert(0, [])
+        main_outputs[0].append({"node": tgt, "type": "main", "index": 0})
         changed = True
         success(f"Connected '{src}' -> '{tgt}'")
 
@@ -1251,7 +1254,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
                 if isinstance(outputs, list):
                     for output_list in outputs:
                         if isinstance(output_list, list):
-                            output_list[:] = [t for t in output_list if t.get("node") != tgt]
+                            output_list[:] = [t for t in output_list if isinstance(t, dict) and t.get("node") != tgt]
             changed = True
             success(f"Disconnected '{src}' -> '{tgt}'")
         else:
