@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.1.9"
+VERSION = "2.2.0"
 
 
 def _safe_filename(name: str) -> str:
@@ -585,11 +585,11 @@ def workflow_bulk_activate(ctx: click.Context, tag: str | None, search: str | No
     ok, fail = 0, 0
     for w in inactive:
         try:
-            workflows.activate_workflow(w["id"], **conn)
-            click.secho(f"    {w['id']}  {w.get('name', '?')}", fg="green")
+            workflows.activate_workflow(w.get("id", ""), **conn)
+            click.secho(f"    {w.get('id', '?')}  {w.get('name', '?')}", fg="green")
             ok += 1
         except Exception as exc:
-            click.secho(f"    {w['id']}  {w.get('name', '?')} — {exc}", fg="red")
+            click.secho(f"    {w.get('id', '?')}  {w.get('name', '?')} — {exc}", fg="red")
             fail += 1
     success(f"Activated {ok}, failed {fail}")
 
@@ -617,11 +617,11 @@ def workflow_bulk_deactivate(ctx: click.Context, tag: str | None, search: str | 
     ok, fail = 0, 0
     for w in active:
         try:
-            workflows.deactivate_workflow(w["id"], **conn)
+            workflows.deactivate_workflow(w.get("id", ""), **conn)
             click.secho(f"    {w['id']}  {w.get('name', '?')}", fg="bright_black")
             ok += 1
         except Exception as exc:
-            click.secho(f"    {w['id']}  {w.get('name', '?')} — {exc}", fg="red")
+            click.secho(f"    {w.get('id', '?')}  {w.get('name', '?')} — {exc}", fg="red")
             fail += 1
     success(f"Deactivated {ok}, failed {fail}")
 
@@ -977,7 +977,7 @@ def template_search(ctx: click.Context, query: str, limit: int) -> None:
     for w in wfs:
         views = w.get("totalViews", 0)
         nodes = len(w.get("nodes", w.get("workflowInfo", {}).get("nodeCount", 0)) if isinstance(w.get("nodes"), list) else [])
-        click.echo(f"    {click.style(str(w['id']), fg='cyan'):>8s}  {w['name'][:60]}")
+        click.echo(f"    {click.style(str(w.get('id', '?')), fg='cyan'):>8s}  {w.get('name', '?')[:60]}")
         click.secho(f"             {views:,} views  by {w.get('user', {}).get('username', '?')}", fg="bright_black")
     click.echo()
 
@@ -1579,10 +1579,10 @@ def node_search(ctx: click.Context, query: str, limit: int) -> None:
         warn(f"No node packages found for '{query}'")
         return
 
-    click.secho(f"\n  {data['total']:,} packages found for '{query}' (showing {len(pkgs)}):\n", fg="cyan")
+    click.secho(f"\n  {data.get('total', '?'):,} packages found for '{query}' (showing {len(pkgs)}):\n", fg="cyan")
     for p in pkgs:
-        click.echo(f"    {click.style(p['name'], fg='cyan')}")
-        click.secho(f"      v{p['version']}  by {p['author']}  —  {p['description']}", fg="bright_black")
+        click.echo(f"    {click.style(p.get('name', '?'), fg='cyan')}")
+        click.secho(f"      v{p.get('version', '?')}  by {p.get('author', '?')}  —  {p.get('description', '')}", fg="bright_black")
     click.echo(f"\n  Use: cli-anything-n8n node info <package-name> for details")
     click.echo()
 
@@ -1598,16 +1598,16 @@ def node_info(ctx: click.Context, package_name: str) -> None:
         output(data, True)
         return
 
-    click.secho(f"\n  {data['name']} v{data['version']}", fg="cyan", bold=True)
-    click.echo(f"  {data['description']}")
-    click.echo(f"  Author: {data['author']}")
-    click.echo(f"  License: {data['license']}")
+    click.secho(f"\n  {data.get('name', '?')} v{data.get('version', '?')}", fg="cyan", bold=True)
+    click.echo(f"  {data.get('description', '')}")
+    click.echo(f"  Author: {data.get('author', '?')}")
+    click.echo(f"  License: {data.get('license', '?')}")
     if data.get("homepage"):
-        click.echo(f"  Homepage: {data['homepage']}")
-    click.echo(f"  npm: {data['npm_url']}")
+        click.echo(f"  Homepage: {data.get('homepage', '')}")
+    click.echo(f"  npm: {data.get('npm_url', '')}")
 
     if data.get("n8n_nodes"):
-        click.secho(f"\n  Nodes provided ({len(data['n8n_nodes'])}):", fg="cyan")
+        click.secho(f"\n  Nodes provided ({len(data.get('n8n_nodes', []))}):", fg="cyan")
         for n in data["n8n_nodes"]:
             click.echo(f"    - {n}")
 
@@ -1617,7 +1617,7 @@ def node_info(ctx: click.Context, package_name: str) -> None:
             click.echo(f"    - {c}")
 
     click.secho(f"\n  Install:", fg="green")
-    click.echo(f"    {data['install_cmd']}")
+    click.echo(f"    {data.get('install_cmd', 'N/A')}")
     click.echo()
 
 
@@ -1667,7 +1667,7 @@ def workflow_patterns(ctx: click.Context) -> None:
         return
     click.secho("\n  Available workflow patterns:\n", fg="cyan", bold=True)
     for p in patterns:
-        click.echo(f"    {click.style(p['name'], fg='cyan'):>20s}  {p['description']}")
+        click.echo(f"    {click.style(p.get('name', '?'), fg='cyan'):>20s}  {p.get('description', '')}")
     click.echo(f"\n  Usage: cli-anything-n8n workflow scaffold <pattern> [--deploy]")
     click.echo()
 

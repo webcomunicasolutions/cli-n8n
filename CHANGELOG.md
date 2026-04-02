@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.2.0] - 2026-04-02
+
+### Hardening (review round 6)
+- **Defensive dict access**: Replaced ALL `dict['key']` with `dict.get('key', default)` in display code for external API data (templates, npm nodes, bulk operations). Prevents KeyError crashes from malformed API responses.
+- 15+ unsafe dict accesses fixed across template search, node search, node info, bulk activate/deactivate, and scaffold display
+
 ## [2.1.9] - 2026-04-02
 
 ### Fixes (manual review + round 6)
