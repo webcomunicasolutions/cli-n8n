@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.6"
+VERSION = "2.3.7"
 
 
 def _safe_filename(name: str) -> str:
@@ -1094,6 +1094,8 @@ def workflow_validate(ctx: click.Context, source: str) -> None:
                     for output_list in outputs:
                         if isinstance(output_list, list):
                             for target in output_list:
+                                if not isinstance(target, dict):
+                                    continue
                                 target_name = target.get("node", "")
                                 if target_name and target_name not in node_names:
                                     issues.append(f"Connection to non-existent node: '{target_name}'")
@@ -1250,7 +1252,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
 
     if connect:
         src, tgt = connect
-        node_names = {n.get("name") for n in wf["nodes"]}
+        node_names = {n.get("name") for n in wf.get("nodes", [])}
         if src not in node_names:
             error(f"Source node '{src}' not found")
             return
@@ -1633,14 +1635,16 @@ def node_info(ctx: click.Context, package_name: str) -> None:
         click.echo(f"  Homepage: {data.get('homepage', '')}")
     click.echo(f"  npm: {data.get('npm_url', '')}")
 
-    if data.get("n8n_nodes"):
-        click.secho(f"\n  Nodes provided ({len(data.get('n8n_nodes', []))}):", fg="cyan")
-        for n in data["n8n_nodes"]:
+    n8n_nodes = data.get("n8n_nodes", [])
+    if n8n_nodes and isinstance(n8n_nodes, list):
+        click.secho(f"\n  Nodes provided ({len(n8n_nodes)}):", fg="cyan")
+        for n in n8n_nodes:
             click.echo(f"    - {n}")
 
-    if data.get("n8n_credentials"):
+    n8n_creds = data.get("n8n_credentials", [])
+    if n8n_creds and isinstance(n8n_creds, list):
         click.secho(f"\n  Credentials:", fg="cyan")
-        for c in data["n8n_credentials"]:
+        for c in n8n_creds:
             click.echo(f"    - {c}")
 
     click.secho(f"\n  Install:", fg="green")

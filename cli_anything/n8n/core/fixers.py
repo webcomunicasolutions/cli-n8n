@@ -130,8 +130,8 @@ def autofix(workflow: dict[str, Any], *, apply: bool = False) -> tuple[dict[str,
                 fixes.append(Fix("connection-numeric-key", f"Connection type '{bk}' should be 'main' (from '{source_name}')", "HIGH"))
                 if apply:
                     moved = conns.pop(bk)
-                    if "main" in conns:
-                        conns["main"].extend(moved)  # Merge, don't overwrite
+                    if "main" in conns and isinstance(conns["main"], list):
+                        conns["main"].extend(moved)
                     else:
                         conns["main"] = moved
 
