@@ -50,5 +50,7 @@ def get_connection(
     """Resolve base_url and api_key from args > env > config file."""
     cfg = load_config()
     url = base_url or cfg["base_url"]
+    if url and not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
     key = api_key or cfg["api_key"]
     return url, key
