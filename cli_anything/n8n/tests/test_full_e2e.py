@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "2.4.3" in result.stdout
+        assert "2.4.4" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(

@@ -51,7 +51,10 @@ def output(data: Any, as_json: bool) -> None:
         else:
             _print_dict(data)
     elif isinstance(data, list):
-        _print_table(data)
+        if data and isinstance(data[0], dict):
+            _print_table(data)
+        else:
+            click.echo(json.dumps(data, indent=2, default=str))
     else:
         click.echo(str(data))
 
