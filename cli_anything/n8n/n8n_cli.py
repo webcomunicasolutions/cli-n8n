@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.9"
+VERSION = "2.4.0"
 
 
 def _safe_filename(name: str) -> str:
@@ -1222,7 +1222,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
 
     if enable_node:
         for n in nodes:
-            if n.get("name") == enable_node:
+            if isinstance(n, dict) and n.get("name") == enable_node:
                 n["disabled"] = False
                 changed = True
                 success(f"Enabled node '{enable_node}'")
@@ -1233,7 +1233,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
 
     if disable_node:
         for n in nodes:
-            if n.get("name") == disable_node:
+            if isinstance(n, dict) and n.get("name") == disable_node:
                 n["disabled"] = True
                 changed = True
                 success(f"Disabled node '{disable_node}'")
@@ -1262,7 +1262,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
 
     if connect:
         src, tgt = connect
-        node_names = {n.get("name") for n in wf.get("nodes", [])}
+        node_names = {n.get("name") for n in wf.get("nodes", []) if isinstance(n, dict)}
         if src not in node_names:
             error(f"Source node '{src}' not found")
             return
@@ -1547,6 +1547,8 @@ def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -
     # Find webhook trigger node
     webhook_node = None
     for node in wf.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
         node_type = node.get("type", "").lower()
         if "webhook" in node_type:
             webhook_node = node
@@ -1690,9 +1692,11 @@ def workflow_scaffold(ctx: click.Context, pattern: str, name: str | None, deploy
         success(f"Saved scaffold to {out_path}")
     else:
         click.secho(f"\n  Pattern: {pattern}", fg="cyan", bold=True)
-        click.echo(f"  Name: {wf['name']}")
+        click.echo(f"  Name: {wf.get('name', '?')}")
         click.echo(f"  Nodes: {len(wf.get('nodes', []))}")
         for n in wf.get("nodes", []):
+            if not isinstance(n, dict):
+                continue
             click.echo(f"    - {n.get('name', '?')} ({n.get('type', '?')})")
         click.echo(f"\n  Use --deploy to create in n8n, --output to save to file, or --json to see full JSON")
         click.echo()
