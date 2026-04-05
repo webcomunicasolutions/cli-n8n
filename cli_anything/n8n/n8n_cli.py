@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.0"
+VERSION = "2.3.1"
 
 
 def _safe_filename(name: str) -> str:
@@ -441,13 +441,15 @@ def workflow_backup_all(ctx: click.Context, out_dir: str, active_only: bool) -> 
     # Paginate to get ALL workflows, not just first page
     wf_list: list[dict] = []
     cursor = None
-    while True:
+    seen_cursors: set[str] = set()
+    for _ in range(100):  # Max 100 pages (10,000 workflows)
         data = workflows.list_workflows(**conn, limit=100, cursor=cursor, active=True if active_only else None)
         page = data.get("data", []) if isinstance(data, dict) else data
         wf_list.extend(page)
         cursor = data.get("nextCursor") if isinstance(data, dict) else None
-        if not cursor or not page:
+        if not cursor or not page or cursor in seen_cursors:
             break
+        seen_cursors.add(cursor)
 
     if not wf_list:
         warn("No workflows found")
