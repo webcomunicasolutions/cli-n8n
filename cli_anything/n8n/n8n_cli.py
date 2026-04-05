@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.4.1"
+VERSION = "2.4.2"
 
 
 def _safe_filename(name: str) -> str:
@@ -73,21 +73,25 @@ def _auto_snapshot(workflow_id: str, conn: dict[str, str], trigger: str) -> None
         warn("Could not save snapshot before this change")
 
 
-def _load_json_arg(value: str) -> Any:
-    """Parse a JSON string or read from file if prefixed with @."""
+def _load_json_arg(value: str) -> dict[str, Any]:
+    """Parse a JSON string or read from file if prefixed with @. Must return dict."""
     if value.startswith("@"):
         filepath = Path(value[1:]).resolve()
         try:
             with open(filepath) as f:
-                return json.load(f)
+                data = json.load(f)
         except FileNotFoundError:
             raise ValueError(f"File not found: {filepath}")
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in {filepath}: {e}")
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON: {e}")
+    else:
+        try:
+            data = json.loads(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+    if not isinstance(data, dict):
+        raise ValueError("JSON must be an object, not array or primitive")
+    return data
 
 
 # ─── Root ───────────────────────────────────────────────────────────────────
