@@ -72,9 +72,26 @@ def save_snapshot(
             ),
         )
         conn.commit()
+
+        # Auto-prune: keep max 50 versions per workflow
+        _auto_prune(conn, workflow_id, keep=50)
+
         return next_version
     finally:
         conn.close()
+
+
+def _auto_prune(conn: sqlite3.Connection, workflow_id: str, keep: int = 50) -> None:
+    """Auto-prune old versions to prevent infinite DB growth."""
+    rows = conn.execute(
+        "SELECT id FROM workflow_versions WHERE workflow_id = ? ORDER BY version_number DESC",
+        (workflow_id,),
+    ).fetchall()
+    to_delete = [r["id"] for r in rows[keep:]]
+    if to_delete:
+        placeholders = ",".join("?" for _ in to_delete)
+        with conn:
+            conn.execute(f"DELETE FROM workflow_versions WHERE id IN ({placeholders})", to_delete)
 
 
 def list_versions(workflow_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
@@ -104,7 +121,10 @@ def get_version(version_id: int) -> dict[str, Any] | None:
         if not row:
             return None
         result = dict(row)
-        result["snapshot"] = json.loads(result["snapshot"])
+        try:
+            result["snapshot"] = json.loads(result["snapshot"])
+        except (json.JSONDecodeError, TypeError):
+            result["snapshot"] = {}
         return result
     finally:
         conn.close()
@@ -120,7 +140,10 @@ def get_snapshot(workflow_id: str, version_number: int) -> dict[str, Any] | None
         ).fetchone()
         if not row:
             return None
-        return json.loads(row["snapshot"])
+        try:
+            return json.loads(row["snapshot"])
+        except (json.JSONDecodeError, TypeError):
+            return None
     finally:
         conn.close()
 

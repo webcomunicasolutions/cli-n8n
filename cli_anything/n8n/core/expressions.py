@@ -17,8 +17,14 @@ class ExpressionResult:
     warnings: list[str]
 
 
+MAX_EXPR_LENGTH = 100_000
+
+
 def validate_expression(expr: str) -> ExpressionResult:
     """Validate an n8n expression string."""
+    if len(expr) > MAX_EXPR_LENGTH:
+        return ExpressionResult(False, expr[:100], [f"Expression too long ({len(expr)} chars, max {MAX_EXPR_LENGTH})"], [])
+
     issues: list[str] = []
     warnings: list[str] = []
 
