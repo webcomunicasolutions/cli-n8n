@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.2.1"
+VERSION = "2.3.0"
 
 
 def _safe_filename(name: str) -> str:
@@ -438,8 +438,16 @@ def workflow_import(ctx: click.Context, file_path: str, name: str | None) -> Non
 def workflow_backup_all(ctx: click.Context, out_dir: str, active_only: bool) -> None:
     """Backup ALL workflows to a folder (one JSON per workflow)."""
     conn = _conn(ctx)
-    data = workflows.list_workflows(**conn, limit=500, active=True if active_only else None)
-    wf_list = data.get("data", []) if isinstance(data, dict) else data
+    # Paginate to get ALL workflows, not just first page
+    wf_list: list[dict] = []
+    cursor = None
+    while True:
+        data = workflows.list_workflows(**conn, limit=100, cursor=cursor, active=True if active_only else None)
+        page = data.get("data", []) if isinstance(data, dict) else data
+        wf_list.extend(page)
+        cursor = data.get("nextCursor") if isinstance(data, dict) else None
+        if not cursor or not page:
+            break
 
     if not wf_list:
         warn("No workflows found")
@@ -1061,7 +1069,8 @@ def workflow_validate(ctx: click.Context, source: str) -> None:
             issues.append(f"Node '{node.get('name', '?')}' has no type")
         if not node.get("name"):
             issues.append(f"Node of type '{node.get('type', '?')}' has no name")
-        if "trigger" in node.get("type", "").lower():
+        node_type_lower = node.get("type", "").lower()
+        if "trigger" in node_type_lower or "webhook" in node_type_lower:
             trigger_count += 1
 
     if trigger_count == 0:
@@ -1405,11 +1414,15 @@ def versions_rollback(ctx: click.Context, workflow_id: str, ver_num: int | None)
     # Save current state before rollback
     _auto_snapshot(workflow_id, conn, "pre-rollback")
 
-    # Apply the rollback — never re-activate, user must do it explicitly
+    # Apply the rollback — deactivate first, then update
+    try:
+        workflows.deactivate_workflow(workflow_id, **conn)
+    except Exception:
+        pass  # May already be inactive
     update_data = _clean_for_api(snapshot)
     update_data.pop("active", None)
     workflows.update_workflow(workflow_id, update_data, **conn)
-    success(f"Rolled back workflow {workflow_id} to version {ver_num} (inactive — use activate to enable)")
+    success(f"Rolled back workflow {workflow_id} to version {ver_num} (deactivated — use activate to enable)")
 
 
 @workflow_versions_.command("show")
@@ -1523,20 +1536,22 @@ def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -
         error(f"Workflow is not active. Run: cli-anything-n8n workflow activate {workflow_id}")
         return
 
-    # Build webhook URL (sanitize path to prevent traversal)
+    # Build webhook URL (allow : for path params like /:id, strip only dangerous chars)
     webhook_path = webhook_node.get("parameters", {}).get("path", "")
     if not webhook_path:
         webhook_id = webhook_node.get("webhookId", "")
         webhook_path = webhook_id or workflow_id
-    webhook_path = re.sub(r'[^a-zA-Z0-9_\-/]', '', webhook_path).strip("/")
+    webhook_path = re.sub(r'[^a-zA-Z0-9_\-/:.]', '', webhook_path).strip("/")
 
     base = conn["base_url"].rstrip("/")
     webhook_url = f"{base}/webhook/{webhook_path}"
 
+    # Use the HTTP method configured on the webhook node (default POST)
+    http_method = webhook_node.get("parameters", {}).get("httpMethod", "POST").upper()
     payload = _load_json_arg(test_data) if test_data else {}
 
-    click.echo(f"  Triggering webhook: {webhook_url}")
-    resp = requests.post(webhook_url, json=payload, timeout=30)
+    click.echo(f"  Triggering webhook ({http_method}): {webhook_url}")
+    resp = requests.request(http_method, webhook_url, json=payload if http_method in ("POST", "PUT", "PATCH") else None, params=payload if http_method == "GET" else None, timeout=30)
 
     if _json_flag(ctx):
         try:
