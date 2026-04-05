@@ -51,7 +51,7 @@ class TestCLISubprocess:
             [*_resolve_cli(), "--version"], capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
-        assert "2.3.4" in result.stdout
+        assert "2.3.5" in result.stdout
 
     def test_workflow_help(self):
         result = subprocess.run(
@@ -248,9 +248,9 @@ class TestCLISubprocess:
         assert "schema" in result.stdout
         assert "transfer" in result.stdout
         # "list" command should not appear as a subcommand
-        lines = [l.strip() for l in result.stdout.splitlines()]
-        subcommands = [l for l in lines if l and not l.startswith("Usage") and not l.startswith("-") and not l.startswith("Options") and not l.startswith("Credential")]
-        assert not any(l.startswith("list") for l in subcommands)
+        lines = [line.strip() for line in result.stdout.splitlines()]
+        subcommands = [line for line in lines if line and not line.startswith("Usage") and not line.startswith("-") and not line.startswith("Options") and not line.startswith("Credential")]
+        assert not any(line.startswith("list") for line in subcommands)
 
     def test_config_show_json(self):
         result = subprocess.run(

@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.4"
+VERSION = "2.3.5"
 
 
 def _safe_filename(name: str) -> str:
@@ -216,10 +216,9 @@ def config_test(ctx: click.Context) -> None:
         error("No API key configured. Run: cli-anything-n8n config set api_key YOUR_KEY")
         return
     try:
-        data = workflows.list_workflows(**conn, limit=1)
-        count = len(data.get("data", [])) if isinstance(data, dict) else 0
+        workflows.list_workflows(**conn, limit=1)
         success(f"Connected to {conn['base_url']}")
-        click.echo(f"    API is responding. Found workflows.")
+        click.echo(f"    API is responding.")
     except requests.exceptions.ConnectionError:
         error(f"Cannot connect to {conn['base_url']}")
     except requests.exceptions.HTTPError as exc:
@@ -404,7 +403,10 @@ def workflow_export(ctx: click.Context, workflow_id: str, out_path: str | None) 
         out_path = f"{name}.json"
     # Remove server-specific fields for portability
     export_data = _clean_for_api(data)
-    Path(out_path).write_text(json.dumps(export_data, indent=2, default=str))
+    out = Path(out_path)
+    if out.exists():
+        warn(f"File {out_path} already exists — overwriting")
+    out.write_text(json.dumps(export_data, indent=2, default=str))
     success(f"Exported to {out_path}")
 
 
@@ -982,7 +984,6 @@ def template_search(ctx: click.Context, query: str, limit: int) -> None:
     click.secho(f"\n  {total} templates found for '{query}' (showing {len(wfs)}):\n", fg="cyan")
     for w in wfs:
         views = w.get("totalViews", 0)
-        nodes = len(w.get("nodes", w.get("workflowInfo", {}).get("nodeCount", 0)) if isinstance(w.get("nodes"), list) else [])
         click.echo(f"    {click.style(str(w.get('id', '?')), fg='cyan'):>8s}  {w.get('name', '?')[:60]}")
         click.secho(f"             {views:,} views  by {w.get('user', {}).get('username', '?')}", fg="bright_black")
     click.echo()
@@ -1252,8 +1253,11 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
             error(f"Target node '{tgt}' not found")
             return
         src_conns = connections.setdefault(src, {})
-        main_outputs = src_conns.setdefault("main", [[]])
-        if not main_outputs or not isinstance(main_outputs[0], list):
+        main_outputs = src_conns.get("main")
+        if not isinstance(main_outputs, list):
+            main_outputs = [[]]
+            src_conns["main"] = main_outputs
+        elif not main_outputs or not isinstance(main_outputs[0], list):
             main_outputs.insert(0, [])
         main_outputs[0].append({"node": tgt, "type": "main", "index": 0})
         changed = True
@@ -1420,7 +1424,7 @@ def versions_rollback(ctx: click.Context, workflow_id: str, ver_num: int | None)
     # Apply the rollback — deactivate first, then update
     try:
         workflows.deactivate_workflow(workflow_id, **conn)
-    except Exception:
+    except requests.exceptions.HTTPError:
         pass  # May already be inactive
     update_data = _clean_for_api(snapshot)
     update_data.pop("active", None)
