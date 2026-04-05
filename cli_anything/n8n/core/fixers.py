@@ -27,8 +27,8 @@ def autofix(workflow: dict[str, Any], *, apply: bool = False) -> tuple[dict[str,
     Returns (possibly modified workflow, list of fixes detected).
     """
     fixes: list[Fix] = []
-    nodes = workflow.get("nodes") or []
-    connections = workflow.get("connections") or {}
+    nodes = workflow.get("nodes", [])
+    connections = workflow.get("connections", {})
 
     if not isinstance(nodes, list):
         nodes = []

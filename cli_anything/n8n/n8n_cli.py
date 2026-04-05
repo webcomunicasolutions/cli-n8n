@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.8"
+VERSION = "2.3.9"
 
 
 def _safe_filename(name: str) -> str:
@@ -1068,6 +1068,10 @@ def workflow_validate(ctx: click.Context, source: str) -> None:
         issues.append("Invalid connections format (must be object)")
 
     nodes = data.get("nodes", [])
+    if not isinstance(nodes, list):
+        issues.append("Invalid nodes format (must be array)")
+        nodes = []
+    nodes = [n for n in nodes if isinstance(n, dict)]
     node_names = {n.get("name") for n in nodes}
 
     # Check each node
@@ -1204,7 +1208,11 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
     conn = _conn(ctx)
     wf = workflows.get_workflow(workflow_id, **conn)
     nodes = wf.get("nodes", [])
+    if not isinstance(nodes, list):
+        nodes = []
     connections = wf.get("connections", {})
+    if not isinstance(connections, dict):
+        connections = {}
     changed = False
 
     if rename:
@@ -1236,7 +1244,7 @@ def workflow_patch(ctx: click.Context, workflow_id: str, rename: str | None, ena
 
     if remove_node:
         original_len = len(nodes)
-        wf["nodes"] = [n for n in nodes if n.get("name") != remove_node]
+        wf["nodes"] = [n for n in nodes if isinstance(n, dict) and n.get("name") != remove_node]
         if len(wf["nodes"]) == original_len:
             error(f"Node '{remove_node}' not found")
             return
