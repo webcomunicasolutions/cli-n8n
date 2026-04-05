@@ -34,7 +34,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.1"
+VERSION = "2.3.2"
 
 
 def _safe_filename(name: str) -> str:
@@ -628,7 +628,7 @@ def workflow_bulk_deactivate(ctx: click.Context, tag: str | None, search: str | 
     for w in active:
         try:
             workflows.deactivate_workflow(w.get("id", ""), **conn)
-            click.secho(f"    {w['id']}  {w.get('name', '?')}", fg="bright_black")
+            click.secho(f"    {w.get('id', '?')}  {w.get('name', '?')}", fg="bright_black")
             ok += 1
         except Exception as exc:
             click.secho(f"    {w.get('id', '?')}  {w.get('name', '?')} — {exc}", fg="red")
@@ -1020,7 +1020,9 @@ def template_deploy(ctx: click.Context, template_id: int, name: str | None) -> N
     conn = _conn(ctx)
     click.echo(f"  Fetching template #{template_id} from n8n.io...")
     data = templates.get_template(template_id)
-    wf_data = data.get("workflow", {}).get("workflow", data.get("workflow", {}))
+    # n8n.io API nests workflow data under "workflow" key
+    wf_wrapper = data.get("workflow", {})
+    wf_data = wf_wrapper.get("workflow", wf_wrapper) if isinstance(wf_wrapper, dict) else {}
 
     # Clean for import — never auto-activate
     for field in ("id", "createdAt", "updatedAt", "versionId", "shared"):
@@ -1406,7 +1408,10 @@ def versions_rollback(ctx: click.Context, workflow_id: str, ver_num: int | None)
         if not vers:
             error(f"No versions found for workflow {workflow_id}")
             return
-        ver_num = vers[0]["version_number"]
+        ver_num = vers[0].get("version_number")
+        if not ver_num:
+            error("Version data is corrupted")
+            return
 
     snapshot = versions.get_snapshot(workflow_id, ver_num)
     if not snapshot:
@@ -1667,9 +1672,9 @@ def workflow_scaffold(ctx: click.Context, pattern: str, name: str | None, deploy
     else:
         click.secho(f"\n  Pattern: {pattern}", fg="cyan", bold=True)
         click.echo(f"  Name: {wf['name']}")
-        click.echo(f"  Nodes: {len(wf['nodes'])}")
-        for n in wf["nodes"]:
-            click.echo(f"    - {n['name']} ({n['type']})")
+        click.echo(f"  Nodes: {len(wf.get('nodes', []))}")
+        for n in wf.get("nodes", []):
+            click.echo(f"    - {n.get('name', '?')} ({n.get('type', '?')})")
         click.echo(f"\n  Use --deploy to create in n8n, --output to save to file, or --json to see full JSON")
         click.echo()
 
