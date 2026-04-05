@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.7"
+VERSION = "2.3.8"
 
 
 def _safe_filename(name: str) -> str:
@@ -491,8 +491,10 @@ def workflow_restore_all(ctx: click.Context, backup_dir: str, dry_run: bool) -> 
     """Restore workflows from a backup folder."""
     conn = _conn(ctx)
     backup_path = Path(backup_dir)
+    backup_resolved = backup_path.resolve()
     json_files = sorted(backup_path.glob("*.json"))
-    json_files = [f for f in json_files if f.name != "_manifest.json"]
+    # Filter manifest and symlinks pointing outside backup dir
+    json_files = [f for f in json_files if f.name != "_manifest.json" and str(f.resolve()).startswith(str(backup_resolved))]
 
     if not json_files:
         warn(f"No JSON files found in {backup_dir}/")
