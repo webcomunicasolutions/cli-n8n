@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.5"
+VERSION = "2.3.6"
 
 
 def _safe_filename(name: str) -> str:
@@ -418,6 +418,9 @@ def workflow_import(ctx: click.Context, file_path: str, name: str | None) -> Non
     """Import a workflow from a JSON file."""
     with open(file_path) as f:
         data = json.load(f)
+    if not isinstance(data, dict):
+        error("Invalid workflow format: must be a JSON object, not array or string")
+        return
     # Remove fields that would conflict on import
     for field in ("id", "createdAt", "updatedAt", "versionId", "shared"):
         data.pop(field, None)
@@ -500,6 +503,8 @@ def workflow_restore_all(ctx: click.Context, backup_dir: str, dry_run: bool) -> 
     for f in json_files:
         try:
             data = json.loads(f.read_text())
+            if not isinstance(data, dict):
+                raise ValueError("Not a valid workflow JSON object")
             name = data.get("name", f.stem)
             if dry_run:
                 click.echo(f"    Would import: {name}")
