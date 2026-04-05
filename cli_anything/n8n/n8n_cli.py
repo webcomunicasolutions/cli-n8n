@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 import time
 from pathlib import Path
@@ -34,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.3.2"
+VERSION = "2.3.3"
 
 
 def _safe_filename(name: str) -> str:
@@ -43,10 +44,6 @@ def _safe_filename(name: str) -> str:
     name = re.sub(r'[\s/\\]+', '_', name)
     return name[:60] or "workflow"
 
-STATUS_COLORS = {
-    "success": "green", "error": "red", "running": "yellow",
-    "waiting": "cyan", "new": "blue",
-}
 
 # Fields to strip when sending workflow data to n8n API
 _INTERNAL_FIELDS = frozenset({"id", "createdAt", "updatedAt", "versionId", "shared"})
@@ -73,7 +70,7 @@ def _auto_snapshot(workflow_id: str, conn: dict[str, str], trigger: str) -> None
         ver = versions.save_snapshot(workflow_id, wf_data, trigger)
         click.secho(f"  (snapshot v{ver} saved)", fg="bright_black")
     except (requests.exceptions.RequestException, OSError):
-        pass  # Non-critical — don't block the operation
+        warn("Could not save snapshot before this change")
 
 
 def _load_json_arg(value: str) -> Any:
@@ -156,7 +153,6 @@ def repl(ctx: click.Context) -> None:
             click.echo(cli.get_help(ctx))
             continue
         try:
-            import shlex
             try:
                 args = shlex.split(line)
             except ValueError:

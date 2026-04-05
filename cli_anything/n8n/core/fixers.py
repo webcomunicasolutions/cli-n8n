@@ -182,11 +182,11 @@ def _iter_params(params: dict[str, Any], prefix: str = "") -> list[tuple[str, An
 _KEY_PART_RE = re.compile(r'([^\[.\]]+)|\[(\d+)\]')
 
 
-def _set_nested(d: dict[str, Any], key: str, value: Any) -> None:
+def _set_nested(d: dict[str, Any], key: str, value: Any) -> bool:
     """Set a nested value using dot/bracket notation.
 
     Handles keys like 'a.b', 'a[0].b', 'a.b[1].c' correctly,
-    navigating into both dicts and lists.
+    navigating into both dicts and lists. Returns True if value was set.
     """
     parts: list[str | int] = []
     for match in _KEY_PART_RE.finditer(key):
@@ -195,22 +195,29 @@ def _set_nested(d: dict[str, Any], key: str, value: Any) -> None:
         elif match.group(2) is not None:
             parts.append(int(match.group(2)))
 
+    if not parts:
+        return False
+
     current: Any = d
     for part in parts[:-1]:
         if isinstance(part, int):
             if isinstance(current, list) and 0 <= part < len(current):
                 current = current[part]
             else:
-                return  # Index out of range — skip safely
+                return False
         else:
             if isinstance(current, dict):
                 current = current.setdefault(part, {})
             else:
-                return  # Type mismatch — skip safely
+                return False
 
     last = parts[-1]
     if isinstance(last, int):
         if isinstance(current, list) and 0 <= last < len(current):
             current[last] = value
+            return True
+        return False
     elif isinstance(current, dict):
         current[last] = value
+        return True
+    return False

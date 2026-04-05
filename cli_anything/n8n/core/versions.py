@@ -137,11 +137,12 @@ def prune_versions(workflow_id: str, *, keep: int = 10) -> int:
         ).fetchall()
         to_delete = [r["id"] for r in rows[keep:]]
         if to_delete:
-            conn.execute(
-                f"DELETE FROM workflow_versions WHERE id IN ({','.join('?' * len(to_delete))})",
-                to_delete,
-            )
-            conn.commit()
+            placeholders = ",".join("?" for _ in to_delete)
+            with conn:
+                conn.execute(
+                    f"DELETE FROM workflow_versions WHERE id IN ({placeholders})",
+                    to_delete,
+                )
         return len(to_delete)
     finally:
         conn.close()

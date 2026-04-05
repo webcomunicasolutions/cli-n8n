@@ -46,17 +46,14 @@ def validate_expression(expr: str) -> ExpressionResult:
     for i, exp in enumerate(expressions):
         exp = exp.strip()
 
-        # Check for common n8n variables
+        # Check for common n8n variables and valid JS globals
         valid_prefixes = ("$json", "$node", "$input", "$binary", "$env", "$now", "$today",
                          "$workflow", "$execution", "$prevNode", "$runIndex", "$itemIndex",
-                         "$parameter", "$position", "Math.", "Date.", "Object.", "Array.",
-                         "JSON.", "String.", "Number.", "parseInt", "parseFloat", "encodeURI",
-                         "decodeURI", "btoa", "atob", "DateTime", "$fromAI", "$if", "$ifEmpty")
-
-        # Check if expression uses n8n variables or is plain JS
-        has_n8n_var = any(exp.startswith(p) or f" {p}" in exp for p in valid_prefixes)
-        if not has_n8n_var and not exp.startswith("'") and not exp.startswith('"') and not exp[0:1].isdigit():
-            warnings.append(f"Expression '{exp[:40]}' doesn't use n8n variables — is this intentional?")
+                         "$parameter", "$position", "$fromAI", "$if", "$ifEmpty",
+                         "Math.", "Date.", "Object.", "Array.", "JSON.", "String.",
+                         "Number.", "parseInt", "parseFloat", "encodeURI", "decodeURI",
+                         "btoa", "atob", "DateTime", "true", "false", "null", "undefined",
+                         "new ", "typeof ", "instanceof ")
 
         # Check for common mistakes
         if "$json[" in exp and "'" not in exp and '"' not in exp:
