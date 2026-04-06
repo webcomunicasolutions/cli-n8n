@@ -20,7 +20,10 @@ DB_PATH = DB_DIR / "versions.db"
 
 def _connect() -> sqlite3.Connection:
     DB_DIR.mkdir(parents=True, exist_ok=True)
-    os.chmod(str(DB_DIR), 0o700)
+    try:
+        os.chmod(str(DB_DIR), 0o700)
+    except OSError:
+        pass
     conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

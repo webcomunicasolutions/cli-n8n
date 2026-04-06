@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.4.5"
+VERSION = "2.4.6"
 
 
 def _safe_filename(name: str) -> str:
@@ -244,10 +244,11 @@ def install_completions(shell: str) -> None:
     import subprocess
     env_var = "_CLI_ANYTHING_N8N_COMPLETE"
     shell_map = {"bash": "bash_source", "zsh": "zsh_source", "fish": "fish_source"}
+    import os
     result = subprocess.run(
-        ["cli-anything-n8n"],
+        [sys.executable, "-m", "cli_anything.n8n"],
         capture_output=True, text=True, timeout=5,
-        env={**__import__("os").environ, env_var: shell_map[shell]},
+        env={**os.environ, env_var: shell_map[shell]},
     )
     if result.stdout:
         click.echo(result.stdout)
@@ -1578,6 +1579,9 @@ def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -
         webhook_id = webhook_node.get("webhookId", "")
         webhook_path = webhook_id or workflow_id
     webhook_path = re.sub(r'[^a-zA-Z0-9_\-/:.]', '', webhook_path).strip("/")
+    if any(seg in {".", ".."} for seg in webhook_path.split("/")):
+        error("Webhook path contains invalid dot segments")
+        return
 
     base = conn["base_url"].rstrip("/")
     webhook_url = f"{base}/webhook/{webhook_path}"
@@ -1587,7 +1591,8 @@ def workflow_test(ctx: click.Context, workflow_id: str, test_data: str | None) -
     payload = _load_json_arg(test_data) if test_data else {}
 
     click.echo(f"  Triggering webhook ({http_method}): {webhook_url}")
-    resp = requests.request(http_method, webhook_url, json=payload if http_method in ("POST", "PUT", "PATCH") else None, params=payload if http_method == "GET" else None, timeout=30)
+    from cli_anything.n8n.utils.n8n_backend import DEFAULT_TIMEOUT
+    resp = requests.request(http_method, webhook_url, json=payload if http_method in ("POST", "PUT", "PATCH") else None, params=payload if http_method == "GET" else None, timeout=DEFAULT_TIMEOUT)
 
     if _json_flag(ctx):
         try:

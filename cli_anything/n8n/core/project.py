@@ -36,10 +36,16 @@ def load_config() -> dict[str, Any]:
 def save_config(cfg: dict[str, Any]) -> Path:
     """Persist config to disk with restricted permissions."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    os.chmod(str(CONFIG_DIR), 0o700)
+    try:
+        os.chmod(str(CONFIG_DIR), 0o700)
+    except OSError:
+        pass
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
-    os.chmod(str(CONFIG_FILE), 0o600)
+    try:
+        os.chmod(str(CONFIG_FILE), 0o600)
+    except OSError:
+        pass
     return CONFIG_FILE
 
 

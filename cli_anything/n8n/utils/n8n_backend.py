@@ -9,7 +9,10 @@ from typing import Any
 import requests
 
 
-DEFAULT_TIMEOUT = int(os.environ.get("N8N_TIMEOUT", "30"))
+try:
+    DEFAULT_TIMEOUT = int(os.environ.get("N8N_TIMEOUT", "30"))
+except (TypeError, ValueError):
+    DEFAULT_TIMEOUT = 30
 
 # n8n Public API version supported
 MIN_N8N_VERSION = "1.0.0"
