@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.4.6"
+VERSION = "2.4.7"
 
 
 def _safe_filename(name: str) -> str:
@@ -222,7 +222,7 @@ def config_test(ctx: click.Context) -> None:
     try:
         workflows.list_workflows(**conn, limit=1)
         success(f"Connected to {conn['base_url']}")
-        click.echo(f"    API is responding.")
+        click.echo("    API is responding.")
     except requests.exceptions.ConnectionError:
         error(f"Cannot connect to {conn['base_url']}")
     except requests.exceptions.HTTPError as exc:
@@ -252,13 +252,13 @@ def install_completions(shell: str) -> None:
     )
     if result.stdout:
         click.echo(result.stdout)
-        click.echo(f"\n# To install, run:", err=True)
+        click.echo("\n# To install, run:", err=True)
         if shell == "bash":
-            click.echo(f'# cli-anything-n8n completions bash >> ~/.bashrc', err=True)
+            click.echo('# cli-anything-n8n completions bash >> ~/.bashrc', err=True)
         elif shell == "zsh":
-            click.echo(f'# cli-anything-n8n completions zsh >> ~/.zshrc', err=True)
+            click.echo('# cli-anything-n8n completions zsh >> ~/.zshrc', err=True)
         elif shell == "fish":
-            click.echo(f'# cli-anything-n8n completions fish > ~/.config/fish/completions/cli-anything-n8n.fish', err=True)
+            click.echo('# cli-anything-n8n completions fish > ~/.config/fish/completions/cli-anything-n8n.fish', err=True)
     else:
         success(f"Shell completions for {shell} generated. Paste output into your shell config.")
 
@@ -756,7 +756,7 @@ def execution_watch(ctx: click.Context, workflow_id: str | None, interval: int, 
             data = executions.list_executions(**conn, workflow_id=workflow_id, limit=limit)
             rows = data.get("data", []) if isinstance(data, dict) else data
             term_w = shutil.get_terminal_size().columns
-            click.echo(f"\033[2J\033[H", nl=False)  # clear screen
+            click.echo("\033[2J\033[H", nl=False)  # clear screen
             click.secho(f"  n8n executions — {time.strftime('%H:%M:%S')} (every {interval}s, Ctrl+C to stop)\n", fg="cyan")
             if not rows:
                 click.secho("  No executions found.", fg="bright_black")
@@ -1134,7 +1134,7 @@ def workflow_validate(ctx: click.Context, source: str) -> None:
         for i in issues:
             click.secho(f"    {i}", fg="red")
     else:
-        click.secho(f"\n  VALID", fg="green", bold=True)
+        click.secho("\n  VALID", fg="green", bold=True)
 
     if warnings:
         click.secho(f"\n  {len(warnings)} warning(s):", fg="yellow")
@@ -1377,10 +1377,10 @@ def health_check(ctx: click.Context, diagnostic: bool) -> None:
     click.echo(f"  Instance:  {base_url}")
 
     if results["status"] == "connected":
-        click.secho(f"  Status:    Connected", fg="green")
+        click.secho("  Status:    Connected", fg="green")
         click.echo(f"  Response:  {results.get('response_ms', '?')}ms")
     elif results["status"] == "unreachable":
-        click.secho(f"  Status:    Unreachable", fg="red")
+        click.secho("  Status:    Unreachable", fg="red")
     else:
         click.secho(f"  Status:    {results['status']}", fg="red")
 
@@ -1639,7 +1639,7 @@ def node_search(ctx: click.Context, query: str, limit: int) -> None:
     for p in pkgs:
         click.echo(f"    {click.style(p.get('name', '?'), fg='cyan')}")
         click.secho(f"      v{p.get('version', '?')}  by {p.get('author', '?')}  —  {p.get('description', '')}", fg="bright_black")
-    click.echo(f"\n  Use: cli-anything-n8n node info <package-name> for details")
+    click.echo("\n  Use: cli-anything-n8n node info <package-name> for details")
     click.echo()
 
 
@@ -1670,11 +1670,11 @@ def node_info(ctx: click.Context, package_name: str) -> None:
 
     n8n_creds = data.get("n8n_credentials", [])
     if n8n_creds and isinstance(n8n_creds, list):
-        click.secho(f"\n  Credentials:", fg="cyan")
+        click.secho("\n  Credentials:", fg="cyan")
         for c in n8n_creds:
             click.echo(f"    - {c}")
 
-    click.secho(f"\n  Install:", fg="green")
+    click.secho("\n  Install:", fg="green")
     click.echo(f"    {data.get('install_cmd', 'N/A')}")
     click.echo()
 
@@ -1713,7 +1713,7 @@ def workflow_scaffold(ctx: click.Context, pattern: str, name: str | None, deploy
             if not isinstance(n, dict):
                 continue
             click.echo(f"    - {n.get('name', '?')} ({n.get('type', '?')})")
-        click.echo(f"\n  Use --deploy to create in n8n, --output to save to file, or --json to see full JSON")
+        click.echo("\n  Use --deploy to create in n8n, --output to save to file, or --json to see full JSON")
         click.echo()
 
 
@@ -1728,7 +1728,7 @@ def workflow_patterns(ctx: click.Context) -> None:
     click.secho("\n  Available workflow patterns:\n", fg="cyan", bold=True)
     for p in patterns:
         click.echo(f"    {click.style(p.get('name', '?'), fg='cyan'):>20s}  {p.get('description', '')}")
-    click.echo(f"\n  Usage: cli-anything-n8n workflow scaffold <pattern> [--deploy]")
+    click.echo("\n  Usage: cli-anything-n8n workflow scaffold <pattern> [--deploy]")
     click.echo()
 
 
@@ -1750,12 +1750,12 @@ def expression_validate(ctx: click.Context, expr: str) -> None:
         return
 
     if result.issues:
-        click.secho(f"\n  INVALID expression:\n", fg="red", bold=True)
+        click.secho("\n  INVALID expression:\n", fg="red", bold=True)
         for issue in result.issues:
             click.secho(f"    {issue}", fg="red")
 
     if result.warnings:
-        click.secho(f"\n  Warnings:", fg="yellow")
+        click.secho("\n  Warnings:", fg="yellow")
         for w in result.warnings:
             click.secho(f"    {w}", fg="yellow")
 
