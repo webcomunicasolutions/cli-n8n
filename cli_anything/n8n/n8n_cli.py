@@ -35,7 +35,7 @@ from cli_anything.n8n.utils.repl_skin import error, output, print_banner, succes
 
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-VERSION = "2.4.4"
+VERSION = "2.4.5"
 
 
 def _safe_filename(name: str) -> str:
@@ -381,7 +381,13 @@ def workflow_tags(ctx: click.Context, workflow_id: str) -> None:
 @click.pass_context
 def workflow_set_tags(ctx: click.Context, workflow_id: str, json_data: str) -> None:
     """Set workflow tags (JSON array of {id} objects)."""
-    data = workflows.update_workflow_tags(workflow_id, _load_json_arg(json_data), **_conn(ctx))
+    try:
+        tag_ids = json.loads(json_data)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON: {exc}") from exc
+    if not isinstance(tag_ids, list):
+        raise ValueError("JSON must be an array of {id} objects")
+    data = workflows.update_workflow_tags(workflow_id, tag_ids, **_conn(ctx))
     output(data, _json_flag(ctx))
 
 
@@ -498,7 +504,7 @@ def workflow_restore_all(ctx: click.Context, backup_dir: str, dry_run: bool) -> 
     backup_resolved = backup_path.resolve()
     json_files = sorted(backup_path.glob("*.json"))
     # Filter manifest and symlinks pointing outside backup dir
-    json_files = [f for f in json_files if f.name != "_manifest.json" and str(f.resolve()).startswith(str(backup_resolved))]
+    json_files = [f for f in json_files if f.name != "_manifest.json" and f.resolve().is_relative_to(backup_resolved)]
 
     if not json_files:
         warn(f"No JSON files found in {backup_dir}/")

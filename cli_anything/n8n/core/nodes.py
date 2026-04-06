@@ -37,7 +37,7 @@ def search_nodes(query: str, *, limit: int = 15) -> dict[str, Any]:
             "description": pkg.get("description", "")[:120],
             "author": pkg.get("publisher", {}).get("username", pkg.get("author", {}).get("name", "")),
             "npm_url": f"https://www.npmjs.com/package/{name}",
-            "weekly_downloads": obj.get("score", {}).get("detail", {}).get("popularity", 0),
+            "popularity_score": obj.get("score", {}).get("detail", {}).get("popularity", 0),
         })
 
     return {"total": data.get("total", 0), "packages": packages}

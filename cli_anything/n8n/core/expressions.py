@@ -44,7 +44,7 @@ def validate_expression(expr: str) -> ExpressionResult:
     single_open = inner.count("{") - inner.count("{{") * 2
     single_close = inner.count("}") - inner.count("}}") * 2
     if single_open > 0 or single_close > 0:
-        warnings.append("Found single braces {{ or }} — n8n expressions use double braces {{}}")
+        warnings.append("Found single '{' or '}' braces — n8n expressions use double '{{' and '}}'")
 
     # Extract expressions inside {{ }}
     expressions = re.findall(r"\{\{(.*?)\}\}", inner, re.DOTALL)
